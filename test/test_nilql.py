@@ -24,8 +24,8 @@ class Test_nilql(TestCase):
         """
         Test key generation.
         """
-        cluster = {'decentralized': False}
-        operations = {'match': True, 'sum': False}
+        cluster = {'nodes': [{}]}
+        operations = {'match': True}
         sk = nilql.secret_key(cluster, operations)
         self.assertTrue('value' in sk)
 
@@ -35,9 +35,9 @@ class Test_nilql(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='cannot create secret key that supports both match and sum operations'
+            match='cannot create secret key that supports multiple operations'
         ):
-            cluster = {'decentralized': False}
+            cluster = {'nodes': [{}]}
             operations = {'match': True, 'sum': True}
             nilql.secret_key(cluster, operations)
 
@@ -45,31 +45,45 @@ class Test_nilql(TestCase):
             ValueError,
             match='cannot create secret key that supports no operations'
         ):
-            cluster = {'decentralized': False}
-            operations = {'match': False, 'sum': False}
+            cluster = {'nodes': [{}]}
+            operations = {}
             nilql.secret_key(cluster, operations)
 
     def test_encrypt_of_int_for_match(self):
         """
         Test encryption of integer for matching.
         """
-        cluster = {'decentralized': False}
-        operations = {'match': True, 'sum': False}
+        cluster = {'nodes': [{}]}
+        operations = {'match': True}
         sk = nilql.secret_key(cluster, operations)
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
         self.assertTrue(isinstance(ciphertext, bytes) and len(ciphertext) == 64)
 
-    def test_encrypt_of_str_for_match(self):
+    def test_encrypt_of_str_for_match_single(self):
         """
         Test encryption of string for matching.
         """
-        cluster = {'decentralized': False}
-        operations = {'match': True, 'sum': False}
-        sk = nilql.secret_key(cluster, operations)
+        sk = nilql.secret_key({'nodes': [{}]}, {'match': True})
         plaintext = 'ABC'
         ciphertext = nilql.encrypt(sk, plaintext)
         self.assertTrue(isinstance(ciphertext, bytes) and len(ciphertext) == 64)
+
+    def test_encrypt_of_str_for_match_multiple(self):
+        """
+        Test encryption of string for matching.
+        """
+        sk = nilql.secret_key({'nodes': [{}, {}]}, {'match': True})
+        plaintext = 'ABC'
+        ciphertext = nilql.encrypt(sk, plaintext)
+        self.assertTrue(
+            len(ciphertext) == 2
+            and
+            all(
+                isinstance(c, bytes) and len(c) == 64
+                for c in ciphertext
+            )
+        )
 
     def test_encrypt_of_int_for_match_error(self):
         """
@@ -79,8 +93,8 @@ class Test_nilql(TestCase):
             ValueError,
             match='plaintext must be 32-bit nonnegative integer value'
         ):
-            cluster = {'decentralized': False}
-            operations = {'match': True, 'sum': False}
+            cluster = {'nodes': [{}]}
+            operations = {'match': True}
             sk = nilql.secret_key(cluster, operations)
             plaintext = 2**32
             nilql.encrypt(sk, plaintext)
@@ -93,8 +107,8 @@ class Test_nilql(TestCase):
             ValueError,
             match='plaintext string must be possible to encode in 4096 bytes or fewer'
         ):
-            cluster = {'decentralized': False}
-            operations = {'match': True, 'sum': False}
+            cluster = {'nodes': [{}]}
+            operations = {'match': True}
             sk = nilql.secret_key(cluster, operations)
             plaintext = 'X' * 4097
             nilql.encrypt(sk, plaintext)

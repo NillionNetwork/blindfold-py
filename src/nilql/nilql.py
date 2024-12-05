@@ -12,7 +12,7 @@ import hashlib
 _PLAINTEXT_UNSIGNED_INTEGER_MAX = 4294967296
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 
-def secret_key(cluster: dict, operations: dict = None) -> dict:
+def secret_key(cluster: dict = None, operations: dict = None) -> dict:
     """
     Return a secret key built according to what is specified in the supplied
     cluster configuration and operation list.
@@ -23,23 +23,16 @@ def secret_key(cluster: dict, operations: dict = None) -> dict:
     operations = {} or operations
     instance = {
         'value': None,
-        'cluster': {
-            'decentralized': False
-        },
-        'operations': {
-            'match': False,
-            'sum': False
-        }
+        'cluster': cluster,
+        'operations': operations
     }
-    instance['cluster'].update(cluster)
-    instance['operations'].update(operations)
 
-    if (instance['operations']['match'] and instance['operations']['sum']):
+    if len([op for (op, status) in instance['operations'].items() if status]) > 1:
         raise ValueError(
-            'cannot create secret key that supports both match and sum operations'
+            'cannot create secret key that supports multiple operations'
         )
 
-    if (not instance['operations']['match'] and not instance['operations']['sum']):
+    if len([op for (op, status) in instance['operations'].items() if status]) < 1:
         raise ValueError(
             'cannot create secret key that supports no operations'
         )
@@ -58,7 +51,7 @@ def encrypt(key: dict, plaintext: Union[int, str]) -> bytes:
     instance = None
 
     # Encrypting (i.e., hashing) a value for matching.
-    if 'salt' in key['value'] and key['operations']['match'] and not key['operations']['sum']:
+    if 'salt' in key['value'] and key['operations']['match']:
         buffer = None
 
         # Encrypting (i.e., hashing) an integer for matching.
@@ -76,6 +69,9 @@ def encrypt(key: dict, plaintext: Union[int, str]) -> bytes:
                 )
 
         instance = hashlib.sha512(key['value']['salt'] + buffer).digest()
+
+        if len(key['cluster']['nodes']) > 1:
+            instance = [instance for _ in key['cluster']['nodes']]
 
     return instance
 
