@@ -5,6 +5,9 @@ description = "Library for working with encrypted data within nilDB queries and 
 license = {text = "MIT"}
 readme = "README.rst"
 requires-python = ">=3.11"
+dependencies = [
+    "bcl~=3.0"
+]
 
 [project.urls]
 Repository = "https://github.com/nillionnetwork/nilql-py"

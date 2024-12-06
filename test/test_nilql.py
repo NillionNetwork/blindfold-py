@@ -35,7 +35,7 @@ class Test_nilql(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='cannot create secret key that supports multiple operations'
+            match='secret key must support exactly one operation'
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True, 'sum': True}
@@ -43,7 +43,7 @@ class Test_nilql(TestCase):
 
         with pytest.raises(
             ValueError,
-            match='cannot create secret key that supports no operations'
+            match='secret key must support exactly one operation'
         ):
             cluster = {'nodes': [{}]}
             operations = {}
