@@ -28,7 +28,7 @@ def _encode(value: Union[int, str]) -> bytes:
     additional context).
 
     >>> _encode(123).hex()
-    '007b00000000000000'
+    '007b00008000000000'
     >>> _encode('abc').hex()
     '01616263'
 
@@ -40,7 +40,10 @@ def _encode(value: Union[int, str]) -> bytes:
     ValueError: cannot encode value
     """
     if isinstance(value, int):
-        return bytes([0]) + value.to_bytes(8, 'little')
+        return (
+            bytes([0]) +
+            (value - _PLAINTEXT_SIGNED_INTEGER_MIN).to_bytes(8, 'little')
+        )
 
     if isinstance(value, str):
         return bytes([1]) + value.encode('UTF-8')
@@ -71,7 +74,8 @@ def _decode(value: bytes) -> Union[int, str]:
         raise TypeError('can only decode bytes-like object')
 
     if value[0] == 0: # Indicates encoded value is a 32-bit signed integer.
-        return int.from_bytes(value[1:], 'little')
+        integer = int.from_bytes(value[1:], 'little')
+        return integer + _PLAINTEXT_SIGNED_INTEGER_MIN
 
     if value[0] == 1: # Indicates encoded value is a UTF-8 string.
         return value[1:].decode('UTF-8')
@@ -183,15 +187,21 @@ def decrypt(key: dict, ciphertext: Union[bytes, Sequence[bytes]]) -> bytes:
     >>> key = secret_key({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
     123
-    >>> key = secret_key({'nodes': [{}, {}]}, {'sum': True})
-    >>> decrypt(key, encrypt(key, 123))
-    123
+    >>> key = secret_key({'nodes': [{}, {}]}, {'store': True})
+    >>> decrypt(key, encrypt(key, -10))
+    -10
     >>> key = secret_key({'nodes': [{}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 'abc'))
     'abc'
     >>> key = secret_key({'nodes': [{}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
     123
+    >>> key = secret_key({'nodes': [{}, {}]}, {'sum': True})
+    >>> decrypt(key, encrypt(key, 123))
+    123
+    >>> key = secret_key({'nodes': [{}, {}]}, {'sum': True})
+    >>> decrypt(key, encrypt(key, -10))
+    -10
 
     If a value cannot be decrypted, an exception is raised.
 
@@ -220,6 +230,9 @@ def decrypt(key: dict, ciphertext: Union[bytes, Sequence[bytes]]) -> bytes:
             total = 0
             for share in ciphertext:
                 total = (total + share) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+
+            if total > _PLAINTEXT_SIGNED_INTEGER_MAX:
+                total -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
             return total
 
