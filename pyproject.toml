@@ -6,7 +6,7 @@ license = {text = "MIT"}
 readme = "README.rst"
 requires-python = ">=3.11"
 dependencies = [
-    "bcl~=3.0"
+    "bcl~=2.3"
 ]
 
 [project.urls]
