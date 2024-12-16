@@ -17,7 +17,7 @@ class Test_nilql(TestCase):
         """
         module = import_module('nilql.nilql')
         self.assertTrue({
-            'secret_key', 'encrypt', 'decrypt'
+            'secret_key', 'encrypt', 'decrypt', 'share'
         }.issubset(module.__dict__.keys()))
 
     def test_secret_key_creation(self):
