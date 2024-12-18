@@ -8,6 +8,7 @@ import doctest
 import secrets
 import hashlib
 import bcl
+import pailliers
 
 _PLAINTEXT_SIGNED_INTEGER_MIN = -2147483648
 """Minimum plaintext 32-bit signed integer value that can be encrypted."""
@@ -90,27 +91,56 @@ def secret_key(cluster: dict = None, operations: dict = None) -> dict:
     # Create instance with default cluster configuration and operations
     # specification, updating the configuration and specification with the
     # supplied arguments.
-    operations = {} or operations
     instance = {
         'value': None,
         'cluster': cluster,
-        'operations': operations
+        'operations': {} or operations
     }
 
     if len([op for (op, status) in instance['operations'].items() if status]) != 1:
         raise ValueError('secret key must support exactly one operation')
 
-    if instance['operations'].get('match'):
-        salt = secrets.token_bytes(64)
-        instance['value'] = {'salt': salt}
-
     if instance['operations'].get('store'):
         if len(instance['cluster']['nodes']) == 1:
             instance['value'] = bcl.symmetric.secret()
 
+    if instance['operations'].get('match'):
+        salt = secrets.token_bytes(64)
+        instance['value'] = {'salt': salt}
+
+    if instance['operations'].get('sum'):
+        if len(instance['cluster']['nodes']) == 1:
+            instance['value'] = pailliers.secret(2048)
+
     return instance
 
-def encrypt(key: dict, plaintext: Union[int, str]) -> bytes:
+def public_key(secret_key: dict) -> dict: # pylint: disable=redefined-outer-name
+    """
+    Return a public key built according to what is specified in the supplied
+    secret key.
+
+    >>> sk = secret_key({'nodes': [{}]}, {'sum': True})
+    >>> isinstance(public_key(sk), dict)
+    True
+    """
+    # Create instance with default cluster configuration and operations
+    # specification, updating the configuration and specification with the
+    # supplied arguments.
+    instance = {
+        'value': None,
+        'cluster': secret_key['cluster'],
+        'operations': secret_key['operations']
+    }
+
+    if isinstance(secret_key['value'], pailliers.secret):
+        instance['value'] = pailliers.public(secret_key['value'])
+
+    return instance
+
+def encrypt(
+        key: dict,
+        plaintext: Union[int, str]
+    ) -> Union[bytes, Sequence[bytes], int, Sequence[int]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
@@ -165,7 +195,9 @@ def encrypt(key: dict, plaintext: Union[int, str]) -> bytes:
 
     # Encrypt a numerical value for summation.
     if key['operations'].get('sum'):
-        if len(key['cluster']['nodes']) > 1:
+        if len(key['cluster']['nodes']) == 1:
+            instance = pailliers.encrypt(key['value'], plaintext)
+        elif len(key['cluster']['nodes']) > 1:
             # Use additive secret sharing for multi-node clusters.
             shares = []
             total = 0
@@ -179,7 +211,10 @@ def encrypt(key: dict, plaintext: Union[int, str]) -> bytes:
 
     return instance
 
-def decrypt(key: dict, ciphertext: Union[bytes, Sequence[bytes]]) -> bytes:
+def decrypt(
+        key: dict,
+        ciphertext: Union[bytes, Sequence[bytes], int, Sequence[int]]
+    ) -> Union[bytes, int]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
@@ -226,6 +261,9 @@ def decrypt(key: dict, ciphertext: Union[bytes, Sequence[bytes]]) -> bytes:
         return _decode(bytes_)
 
     if key['operations'].get('sum'):
+        if len(key['cluster']['nodes']) == 1:
+            return pailliers.decrypt(key['value'], ciphertext)
+
         if len(key['cluster']['nodes']) > 1:
             total = 0
             for share_ in ciphertext:

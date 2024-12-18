@@ -17,7 +17,7 @@ class Test_nilql(TestCase):
         """
         module = import_module('nilql.nilql')
         self.assertTrue({
-            'secret_key', 'encrypt', 'decrypt', 'share'
+            'secret_key', 'public_key', 'encrypt', 'decrypt', 'share'
         }.issubset(module.__dict__.keys()))
 
     def test_secret_key_creation(self):
@@ -84,6 +84,27 @@ class Test_nilql(TestCase):
                 for c in ciphertext
             )
         )
+
+    def test_encrypt_of_int_for_sum_single(self):
+        """
+        Test encryption of string for matching.
+        """
+        sk = nilql.secret_key({'nodes': [{}]}, {'sum': True})
+        pk = nilql.public_key(sk)
+        plaintext = 123
+        ciphertext = nilql.encrypt(pk, plaintext)
+        self.assertTrue(isinstance(ciphertext, int))
+
+    def test_decrypt_of_int_for_sum_single(self):
+        """
+        Test encryption of string for matching.
+        """
+        sk = nilql.secret_key({'nodes': [{}]}, {'sum': True})
+        pk = nilql.public_key(sk)
+        plaintext = 123
+        ciphertext = nilql.encrypt(pk, plaintext)
+        plaintext_ = nilql.decrypt(sk, ciphertext)
+        self.assertTrue(plaintext == plaintext_)
 
     def test_encrypt_of_int_for_match_error(self):
         """
