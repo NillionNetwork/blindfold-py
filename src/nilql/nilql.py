@@ -5,6 +5,7 @@ replies.
 from __future__ import annotations
 from typing import Union, Sequence
 import doctest
+import base64
 import secrets
 import hashlib
 import bcl
@@ -21,6 +22,18 @@ _SECRET_SHARED_SIGNED_INTEGER_MODULUS = 4294967296
 
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
+
+def _pack(b: bytes) -> str:
+    """
+    Encode a bytes-like object as a Base64 string (for compatibility with JSON).
+    """
+    return base64.b64encode(b).decode('ascii')
+
+def _unpack(s: str) -> bytes:
+    """
+    Decode a bytes-like object from its Base64 string encoding.
+    """
+    return base64.b64decode(s)
 
 def _encode(value: Union[int, str]) -> bytes:
     """
@@ -140,13 +153,13 @@ def public_key(secret_key: dict) -> dict: # pylint: disable=redefined-outer-name
 def encrypt(
         key: dict,
         plaintext: Union[int, str]
-    ) -> Union[bytes, Sequence[bytes], int, Sequence[int]]:
+    ) -> Union[str, Sequence[str], int, Sequence[int]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
 
     >>> key = secret_key({'nodes': [{}]}, {'store': True})
-    >>> isinstance(encrypt(key, 123), bytes)
+    >>> isinstance(encrypt(key, 123), str)
     True
     """
     instance = None
@@ -157,7 +170,12 @@ def encrypt(
 
         if len(key['cluster']['nodes']) == 1:
             # For single-node clusters, the data is encrypted using a symmetric key.
-            instance = bcl.symmetric.encrypt(key['value'], bcl.plain(_encode(plaintext)))
+            instance = _pack(
+                bcl.symmetric.encrypt(
+                    key['value'],
+                    bcl.plain(_encode(plaintext))
+                )
+            )
         elif len(key['cluster']['nodes']) > 1:
             # For multi-node clusters, the ciphertext is secret-shared across the nodes
             # using XOR.
@@ -168,7 +186,7 @@ def encrypt(
                 aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
                 shares.append(mask)
             shares.append(bytes(a ^ b for (a, b) in zip(aggregate, bytes_)))
-            instance = shares
+            instance = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match') and 'salt' in key['value']:
@@ -188,8 +206,9 @@ def encrypt(
                     'plaintext string must be possible to encode in 4096 bytes or fewer'
                 )
 
-        instance = hashlib.sha512(key['value']['salt'] + buffer).digest()
+        instance = _pack(hashlib.sha512(key['value']['salt'] + buffer).digest())
 
+        # If there are multiple nodes, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
             instance = [instance for _ in key['cluster']['nodes']]
 
@@ -213,7 +232,7 @@ def encrypt(
 
 def decrypt(
         key: dict,
-        ciphertext: Union[bytes, Sequence[bytes], int, Sequence[int]]
+        ciphertext: Union[str, Sequence[str], int, Sequence[int]]
     ) -> Union[bytes, int]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
@@ -250,10 +269,15 @@ def decrypt(
     if key['operations'].get('store'):
         if len(key['cluster']['nodes']) == 1:
             # Single-node clusters use symmetric encryption.
-            return _decode(bcl.symmetric.decrypt(key['value'], ciphertext))
+            return _decode(
+                bcl.symmetric.decrypt(
+                    key['value'],
+                    bcl.cipher(_unpack(ciphertext))
+                    )
+            )
 
         # Multi-node clusters use XOR-based secret sharing.
-        shares = ciphertext
+        shares = [_unpack(share) for share in ciphertext]
         bytes_ = bytes(len(shares[0]))
         for share_ in shares:
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))

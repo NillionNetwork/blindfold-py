@@ -58,7 +58,7 @@ class Test_nilql(TestCase):
         sk = nilql.secret_key(cluster, operations)
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
-        self.assertTrue(isinstance(ciphertext, bytes) and len(ciphertext) == 64)
+        self.assertTrue(isinstance(ciphertext, str))
 
     def test_encrypt_of_str_for_match_single(self):
         """
@@ -67,7 +67,7 @@ class Test_nilql(TestCase):
         sk = nilql.secret_key({'nodes': [{}]}, {'match': True})
         plaintext = 'ABC'
         ciphertext = nilql.encrypt(sk, plaintext)
-        self.assertTrue(isinstance(ciphertext, bytes) and len(ciphertext) == 64)
+        self.assertTrue(isinstance(ciphertext, str))
 
     def test_encrypt_of_str_for_match_multiple(self):
         """
@@ -79,10 +79,7 @@ class Test_nilql(TestCase):
         self.assertTrue(
             len(ciphertext) == 2
             and
-            all(
-                isinstance(c, bytes) and len(c) == 64
-                for c in ciphertext
-            )
+            all(isinstance(c, str) for c in ciphertext)
         )
 
     def test_encrypt_of_int_for_sum_single(self):
