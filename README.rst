@@ -4,7 +4,11 @@ nilql
 
 Library for working with encrypted data within nilDB queries and replies.
 
-|actions|
+|readthedocs| |actions|
+
+.. |readthedocs| image:: https://readthedocs.org/projects/nilql/badge/?version=latest
+   :target: https://nilql.readthedocs.io/en/latest/?badge=latest
+   :alt: Read the Docs documentation status.
 
 .. |actions| image:: https://github.com/nillionnetwork/nilql-py/workflows/lint-test-cover-docs/badge.svg#
    :target: https://github.com/nillionnetwork/nilql-py/actions/workflows/lint-test-cover-docs.yml
@@ -66,3 +70,7 @@ In order to contribute to the source code, open an issue or submit a pull reques
 Versioning
 ^^^^^^^^^^
 The version number format for this library and the changes to the library associated with version number increments conform with `Semantic Versioning 2.0.0 <https://semver.org/#semantic-versioning-200>`__.
+
+Publishing
+^^^^^^^^^^
+Ensure that any links in this README document to the Read the Docs documentation of this package (or its dependencies) have appropriate version numbers. Also ensure that the Read the Docs project for this library has an `automation rule <https://docs.readthedocs.io/en/stable/automation-rules.html>`__ that activates and sets as the default all tagged versions.
