@@ -17,8 +17,7 @@ Repository = "https://github.com/nillionnetwork/nilql-py"
 docs = [
     "toml~=0.10.2",
     "sphinx~=5.0",
-    "sphinx-rtd-theme~=2.0.0",
-    "sphinx-autodoc-typehints~=1.23.0"
+    "sphinx-rtd-theme~=2.0.0"
 ]
 test = [
     "pytest~=8.2",
