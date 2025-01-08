@@ -49,6 +49,30 @@ class Test_nilql(TestCase):
             operations = {}
             nilql.secret_key(cluster, operations)
 
+    def test_ciphertext_representation_for_store_multinode(self):
+        """
+        Test that ciphertext representation when storing in a multiple-node cluster.
+        """
+        cluster = {'nodes': [{}, {}, {}]}
+        operations = {'store': True}
+        sk = nilql.secret_key(cluster, operations)
+        plaintext = 'abc'
+        ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
+        decrypted = nilql.decrypt(sk, ciphertext)
+        self.assertTrue(plaintext == decrypted)
+
+    def test_ciphertext_representation_for_sum_multinode(self):
+        """
+        Test that ciphertext representation when storing in a multiple-node cluster.
+        """
+        cluster = {'nodes': [{}, {}, {}]}
+        operations = {'sum': True}
+        sk = nilql.secret_key(cluster, operations)
+        plaintext = 123
+        ciphertext = [456, 246, 4294967296 - 123 - 456]
+        decrypted = nilql.decrypt(sk, ciphertext)
+        self.assertTrue(plaintext == decrypted)
+
     def test_encrypt_of_int_for_match(self):
         """
         Test encryption of integer for matching.
