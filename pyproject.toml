@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
 readme = "README.rst"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "bcl~=2.3",
     "pailliers~=0.1"
