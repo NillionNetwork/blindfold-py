@@ -7,7 +7,7 @@ import pytest
 
 import nilql
 
-class Test_nilql(TestCase):
+class Test_nilql(TestCase): # pylint: disable=invalid-name
     """
     Tests involving published examples demonstrating the use of the library.
     """
@@ -17,7 +17,7 @@ class Test_nilql(TestCase):
         """
         module = import_module('nilql.nilql')
         self.assertTrue({
-            'secret_key', 'public_key', 'encrypt', 'decrypt', 'share'
+            'SecretKey', 'PublicKey', 'encrypt', 'decrypt', 'share'
         }.issubset(module.__dict__.keys()))
 
     def test_secret_key_creation(self):
@@ -26,7 +26,7 @@ class Test_nilql(TestCase):
         """
         cluster = {'nodes': [{}]}
         operations = {'match': True}
-        sk = nilql.secret_key(cluster, operations)
+        sk = nilql.SecretKey.generate(cluster, operations)
         self.assertTrue('value' in sk)
 
     def test_secret_key_creation_errors(self):
@@ -39,7 +39,7 @@ class Test_nilql(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True, 'sum': True}
-            nilql.secret_key(cluster, operations)
+            nilql.SecretKey.generate(cluster, operations)
 
         with pytest.raises(
             ValueError,
@@ -47,7 +47,7 @@ class Test_nilql(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {}
-            nilql.secret_key(cluster, operations)
+            nilql.SecretKey.generate(cluster, operations)
 
     def test_ciphertext_representation_for_store_multinode(self):
         """
@@ -55,7 +55,7 @@ class Test_nilql(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'store': True}
-        sk = nilql.secret_key(cluster, operations)
+        sk = nilql.SecretKey.generate(cluster, operations)
         plaintext = 'abc'
         ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
         decrypted = nilql.decrypt(sk, ciphertext)
@@ -67,7 +67,7 @@ class Test_nilql(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'sum': True}
-        sk = nilql.secret_key(cluster, operations)
+        sk = nilql.SecretKey.generate(cluster, operations)
         plaintext = 123
         ciphertext = [456, 246, 4294967296 - 123 - 456]
         decrypted = nilql.decrypt(sk, ciphertext)
@@ -79,7 +79,7 @@ class Test_nilql(TestCase):
         """
         cluster = {'nodes': [{}]}
         operations = {'match': True}
-        sk = nilql.secret_key(cluster, operations)
+        sk = nilql.SecretKey.generate(cluster, operations)
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
         self.assertTrue(isinstance(ciphertext, str))
@@ -88,7 +88,7 @@ class Test_nilql(TestCase):
         """
         Test encryption of string for matching.
         """
-        sk = nilql.secret_key({'nodes': [{}]}, {'match': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True})
         plaintext = 'ABC'
         ciphertext = nilql.encrypt(sk, plaintext)
         self.assertTrue(isinstance(ciphertext, str))
@@ -97,7 +97,7 @@ class Test_nilql(TestCase):
         """
         Test encryption of string for matching.
         """
-        sk = nilql.secret_key({'nodes': [{}, {}]}, {'match': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}]}, {'match': True})
         plaintext = 'ABC'
         ciphertext = nilql.encrypt(sk, plaintext)
         self.assertTrue(
@@ -110,8 +110,8 @@ class Test_nilql(TestCase):
         """
         Test encryption of string for matching.
         """
-        sk = nilql.secret_key({'nodes': [{}]}, {'sum': True})
-        pk = nilql.public_key(sk)
+        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        pk = nilql.PublicKey.generate(sk)
         plaintext = 123
         ciphertext = nilql.encrypt(pk, plaintext)
         self.assertTrue(isinstance(ciphertext, int))
@@ -120,8 +120,8 @@ class Test_nilql(TestCase):
         """
         Test encryption of string for matching.
         """
-        sk = nilql.secret_key({'nodes': [{}]}, {'sum': True})
-        pk = nilql.public_key(sk)
+        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        pk = nilql.PublicKey.generate(sk)
         plaintext = 123
         ciphertext = nilql.encrypt(pk, plaintext)
         plaintext_ = nilql.decrypt(sk, ciphertext)
@@ -137,7 +137,7 @@ class Test_nilql(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
-            sk = nilql.secret_key(cluster, operations)
+            sk = nilql.SecretKey.generate(cluster, operations)
             plaintext = 2**32
             nilql.encrypt(sk, plaintext)
 
@@ -151,6 +151,6 @@ class Test_nilql(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
-            sk = nilql.secret_key(cluster, operations)
+            sk = nilql.SecretKey.generate(cluster, operations)
             plaintext = 'X' * 4097
             nilql.encrypt(sk, plaintext)

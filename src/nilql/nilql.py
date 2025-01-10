@@ -96,69 +96,79 @@ def _decode(value: bytes) -> Union[int, str]:
 
     raise ValueError('cannot decode value')
 
-def secret_key(cluster: dict = None, operations: dict = None) -> dict:
+class SecretKey(dict):
     """
-    Return a secret key built according to what is specified in the supplied
-    cluster configuration and operation list.
+    Data structure for secret key instances.
     """
-    # Create instance with default cluster configuration and operations
-    # specification, updating the configuration and specification with the
-    # supplied arguments.
-    instance = {
-        'value': None,
-        'cluster': cluster,
-        'operations': {} or operations
-    }
+    @staticmethod
+    def generate(cluster: dict = None, operations: dict = None) -> SecretKey:
+        """
+        Return a secret key built according to what is specified in the supplied
+        cluster configuration and operation list.
+        """
+        # Create instance with default cluster configuration and operations
+        # specification, updating the configuration and specification with the
+        # supplied arguments.
+        instance = SecretKey({
+            'value': None,
+            'cluster': cluster,
+            'operations': {} or operations
+        })
 
-    if len([op for (op, status) in instance['operations'].items() if status]) != 1:
-        raise ValueError('secret key must support exactly one operation')
+        if len([op for (op, status) in instance['operations'].items() if status]) != 1:
+            raise ValueError('secret key must support exactly one operation')
 
-    if instance['operations'].get('store'):
-        if len(instance['cluster']['nodes']) == 1:
-            instance['value'] = bcl.symmetric.secret()
+        if instance['operations'].get('store'):
+            if len(instance['cluster']['nodes']) == 1:
+                instance['value'] = bcl.symmetric.secret()
 
-    if instance['operations'].get('match'):
-        salt = secrets.token_bytes(64)
-        instance['value'] = {'salt': salt}
+        if instance['operations'].get('match'):
+            salt = secrets.token_bytes(64)
+            instance['value'] = {'salt': salt}
 
-    if instance['operations'].get('sum'):
-        if len(instance['cluster']['nodes']) == 1:
-            instance['value'] = pailliers.secret(2048)
+        if instance['operations'].get('sum'):
+            if len(instance['cluster']['nodes']) == 1:
+                instance['value'] = pailliers.secret(2048)
 
-    return instance
+        return instance
 
-def public_key(secret_key: dict) -> dict: # pylint: disable=redefined-outer-name
+class PublicKey(dict):
     """
-    Return a public key built according to what is specified in the supplied
-    secret key.
-
-    >>> sk = secret_key({'nodes': [{}]}, {'sum': True})
-    >>> isinstance(public_key(sk), dict)
-    True
+    Data structure for public key instances.
     """
-    # Create instance with default cluster configuration and operations
-    # specification, updating the configuration and specification with the
-    # supplied arguments.
-    instance = {
-        'value': None,
-        'cluster': secret_key['cluster'],
-        'operations': secret_key['operations']
-    }
+    @staticmethod
+    def generate(secret_key: SecretKey) -> PublicKey:
+        """
+        Return a public key built according to what is specified in the supplied
+        secret key.
 
-    if isinstance(secret_key['value'], pailliers.secret):
-        instance['value'] = pailliers.public(secret_key['value'])
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> isinstance(PublicKey.generate(sk), PublicKey)
+        True
+        """
+        # Create instance with default cluster configuration and operations
+        # specification, updating the configuration and specification with the
+        # supplied arguments.
+        instance = PublicKey({
+            'value': None,
+            'cluster': secret_key['cluster'],
+            'operations': secret_key['operations']
+        })
 
-    return instance
+        if isinstance(secret_key['value'], pailliers.secret):
+            instance['value'] = pailliers.public(secret_key['value'])
+
+        return instance
 
 def encrypt(
-        key: dict,
+        key: Union[SecretKey, PublicKey],
         plaintext: Union[int, str]
     ) -> Union[str, Sequence[str], int, Sequence[int]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
 
-    >>> key = secret_key({'nodes': [{}]}, {'store': True})
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> isinstance(encrypt(key, 123), str)
     True
     """
@@ -231,35 +241,35 @@ def encrypt(
     return instance
 
 def decrypt(
-        key: dict,
+        key: SecretKey,
         ciphertext: Union[str, Sequence[str], int, Sequence[int]]
     ) -> Union[bytes, int]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
 
-    >>> key = secret_key({'nodes': [{}, {}]}, {'store': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
     123
-    >>> key = secret_key({'nodes': [{}, {}]}, {'store': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, -10))
     -10
-    >>> key = secret_key({'nodes': [{}]}, {'store': True})
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 'abc'))
     'abc'
-    >>> key = secret_key({'nodes': [{}]}, {'store': True})
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
     123
-    >>> key = secret_key({'nodes': [{}, {}]}, {'sum': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
     >>> decrypt(key, encrypt(key, 123))
     123
-    >>> key = secret_key({'nodes': [{}, {}]}, {'sum': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
     >>> decrypt(key, encrypt(key, -10))
     -10
 
     If a value cannot be decrypted, an exception is raised.
 
-    >>> key = secret_key({'nodes': [{}, {}]}, {'abc': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'abc': True})
     >>> decrypt(key, encrypt(key, [1, 2, 3]))
     Traceback (most recent call last):
       ...
