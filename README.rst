@@ -18,8 +18,8 @@ Library for working with encrypted data within nilDB queries and replies.
    :target: https://github.com/nillionnetwork/nilql-py/actions/workflows/lint-test-cover-docs.yml
    :alt: GitHub Actions status.
 
-.. |coveralls| image:: https://coveralls.io/repos/github/nillionnetwork/nilql/badge.svg?branch=main
-   :target: https://coveralls.io/github/nillionnetwork/nilql?branch=main
+.. |coveralls| image:: https://coveralls.io/repos/github/NillionNetwork/nilql-py/badge.svg?branch=main
+   :target: https://coveralls.io/github/NillionNetwork/nilql-py?branch=main
    :alt: Coveralls test coverage summary.
 
 Installation and Usage
