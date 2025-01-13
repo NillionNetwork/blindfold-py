@@ -105,12 +105,16 @@ class SecretKey(dict):
         """
         Return a secret key built according to what is specified in the supplied
         cluster configuration and operation list.
+
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> isinstance(sk, SecretKey)
+        True
         """
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
         instance = SecretKey({
-            'value': None,
+            'material': {},
             'cluster': cluster,
             'operations': {} or operations
         })
@@ -136,17 +140,91 @@ class SecretKey(dict):
 
         if instance['operations'].get('store'):
             if len(instance['cluster']['nodes']) == 1:
-                instance['value'] = bcl.symmetric.secret()
+                instance['material'] = bcl.symmetric.secret()
 
         if instance['operations'].get('match'):
-            salt = secrets.token_bytes(64)
-            instance['value'] = {'salt': salt}
+            # Salt for deterministic hashing.
+            instance['material'] = secrets.token_bytes(64)
 
         if instance['operations'].get('sum'):
             if len(instance['cluster']['nodes']) == 1:
-                instance['value'] = pailliers.secret(2048)
+                instance['material'] = pailliers.secret(2048)
 
         return instance
+
+    def dump(self: SecretKey) -> dict:
+        """
+        Return a JSON-compatible :obj:`dict` representation of this key
+        instance.
+        
+        >>> import json
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
+        >>> isinstance(json.dumps(sk.dump()), str)
+        True
+        """
+        dictionary = {
+            'material': {},
+            'cluster': self['cluster'],
+            'operations': self['operations'],
+        }
+
+        if isinstance(self['material'], (bytes, bytearray)):
+            dictionary['material'] = _pack(self['material'])
+        elif self['material'] == {}:
+            pass # There is no key material for clusters with multiple nodes.
+        else:
+            # Secret key for Paillier encryption.
+            dictionary['material'] = {
+                'l': str(self['material'][0]),
+                'm': str(self['material'][1]),
+                'n': str(self['material'][2]),
+                'g': str(self['material'][3])
+            }
+
+        return dictionary
+
+    @staticmethod
+    def load(dictionary: SecretKey) -> dict:
+        """
+        Create an instance from its JSON-compatible dictionary
+        representation.
+
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
+        >>> sk == SecretKey.load(sk.dump())
+        True
+        """
+        secret_key = SecretKey({
+            'material': {},
+            'cluster': dictionary['cluster'],
+            'operations': dictionary['operations'],
+        })
+
+        if isinstance(dictionary['material'], str):
+            secret_key['material'] = _unpack(dictionary['material'])
+            # If this is a secret symmetric key, ensure it has the
+            # expected type.
+            if 'store' in secret_key['operations']:
+                secret_key['material'] = bytes.__new__(
+                    bcl.secret,
+                    secret_key['material']
+                )
+
+        elif len(dictionary['material'].keys()) == 0:
+            pass # There is no key material for clusters with multiple nodes.
+
+        else:
+            # Secret key for Paillier encryption.
+            secret_key['material'] = tuple.__new__(
+                pailliers.secret,
+                (
+                    int(dictionary['material']['l']),
+                    int(dictionary['material']['m']),
+                    int(dictionary['material']['n']),
+                    int(dictionary['material']['g'])
+                )
+            )
+
+        return secret_key
 
 class PublicKey(dict):
     """
@@ -170,12 +248,64 @@ class PublicKey(dict):
             'operations': secret_key['operations']
         })
 
-        if isinstance(secret_key['value'], pailliers.secret):
-            instance['value'] = pailliers.public(secret_key['value'])
+        if isinstance(secret_key['material'], pailliers.secret):
+            instance['material'] = pailliers.public(secret_key['material'])
         else:
             raise ValueError('cannot create public key for supplied secret key')
 
         return instance
+
+    def dump(self: PublicKey) -> dict:
+        """
+        Return a JSON-compatible :obj:`dict` representation of this key
+        instance.
+
+        >>> import json
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> pk = PublicKey.generate(sk)
+        >>> isinstance(json.dumps(pk.dump()), str)
+        True
+        """
+        dictionary = {
+            'material': {},
+            'cluster': self['cluster'],
+            'operations': self['operations'],
+        }
+
+        # Public key for Paillier encryption.
+        dictionary['material'] = {
+            'n': str(self['material'][0]),
+            'g': str(self['material'][1])
+        }
+
+        return dictionary
+
+    @staticmethod
+    def load(dictionary: PublicKey) -> dict:
+        """
+        Create an instance from its JSON-compatible dictionary
+        representation.
+
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> pk = PublicKey.generate(sk)
+        >>> pk == PublicKey.load(pk.dump())
+        True
+        """
+        public_key = PublicKey({
+            'cluster': dictionary['cluster'],
+            'operations': dictionary['operations'],
+        })
+
+        # Public key for Paillier encryption.
+        public_key['material'] = tuple.__new__(
+            pailliers.public,
+            (
+                int(dictionary['material']['n']),
+                int(dictionary['material']['g'])
+            )
+        )
+
+        return public_key
 
 def encrypt(
         key: Union[SecretKey, PublicKey],
@@ -217,7 +347,7 @@ def encrypt(
         if len(key['cluster']['nodes']) == 1:
             # For single-node clusters, the data is encrypted using a symmetric key.
             instance = _pack(
-                bcl.symmetric.encrypt(key['value'], bcl.plain(buffer))
+                bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
         elif len(key['cluster']['nodes']) > 1:
             # For multi-node clusters, the ciphertext is secret-shared across the nodes
@@ -232,8 +362,8 @@ def encrypt(
             instance = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
-    if key['operations'].get('match') and 'salt' in key['value']:
-        instance = _pack(hashlib.sha512(key['value']['salt'] + buffer).digest())
+    if key['operations'].get('match'):
+        instance = _pack(hashlib.sha512(key['material'] + buffer).digest())
 
         # If there are multiple nodes, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
@@ -242,7 +372,7 @@ def encrypt(
     # Encrypt a numerical value for summation.
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
-            instance = pailliers.encrypt(key['value'], plaintext)
+            instance = pailliers.encrypt(key['material'], plaintext)
         elif len(key['cluster']['nodes']) > 1:
             # Use additive secret sharing for multi-node clusters.
             shares = []
@@ -284,13 +414,22 @@ def decrypt(
     >>> decrypt(key, encrypt(key, -10))
     -10
 
-    If a value cannot be decrypted, an exception is raised.
+    An exception is raised if a ciphertext cannot be decrypted using the
+    supplied key (*e.g.*, because one or both are malformed or they are
+    incompatible).
 
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
     TypeError: secret key requires a valid ciphertext from a multi-node cluster
+    >>> decrypt(
+    ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
+    ...     'abc'
+    ... )
+    Traceback (most recent call last):
+      ...
+    ValueError: cannot decrypt supplied ciphertext using the supplied key
     """
     error = ValueError(
         'cannot decrypt supplied ciphertext using the supplied key'
@@ -330,7 +469,7 @@ def decrypt(
             try:
                 return _decode(
                     bcl.symmetric.decrypt(
-                        key['value'],
+                        key['material'],
                         bcl.cipher(_unpack(ciphertext))
                         )
                 )
@@ -347,7 +486,7 @@ def decrypt(
 
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
-            return pailliers.decrypt(key['value'], ciphertext)
+            return pailliers.decrypt(key['material'], ciphertext)
 
         if len(key['cluster']['nodes']) > 1:
             total = 0

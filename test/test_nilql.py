@@ -3,6 +3,7 @@ Test suite containing functional unit tests of exported functions.
 """
 from unittest import TestCase
 from importlib import import_module
+import json
 import pytest
 
 import nilql
@@ -34,35 +35,73 @@ class TestKeys(TestCase):
     """
     def test_key_operations_for_store(self):
         """
-        Test key generation for store operation.
+        Test key generate, dump, JSONify, and load for store operation.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
             sk = nilql.SecretKey.generate(cluster, {'store': True})
-        self.assertTrue(isinstance(sk, nilql.SecretKey))
+            sk_loaded = nilql.SecretKey.load(sk.dump())
+            self.assertTrue(isinstance(sk, nilql.SecretKey))
+            self.assertTrue(sk == sk_loaded)
+
+            sk_from_json = nilql.SecretKey.load(
+                json.loads(json.dumps(sk.dump()))
+            )
+            self.assertTrue(sk == sk_from_json)
 
     def test_key_operations_for_match(self):
         """
-        Test key generation for store operation.
+        Test key generate, dump, JSONify, and load for store operation.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
             sk = nilql.SecretKey.generate(cluster, {'match': True})
-        self.assertTrue(isinstance(sk, nilql.SecretKey))
+            sk_loaded = nilql.SecretKey.load(sk.dump())
+            self.assertTrue(isinstance(sk, nilql.SecretKey))
+            self.assertTrue(sk == sk_loaded)
+
+            sk_from_json = nilql.SecretKey.load(
+                json.loads(json.dumps(sk.dump()))
+            )
+            self.assertTrue(sk == sk_from_json)
 
     def test_key_operations_for_sum_with_single_node(self):
         """
-        Test key generation for store operation with a single node.
+        Test key generate, dump, JSONify, and load for store operation
+        with a single node.
         """
         sk = nilql.SecretKey.generate({'nodes': [{}]}, {'sum': True})
-        pk = nilql.PublicKey.generate(sk)
+        sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
+        self.assertTrue(sk == sk_loaded)
+
+        sk_from_json = nilql.SecretKey.load(
+            json.loads(json.dumps(sk.dump()))
+        )
+        self.assertTrue(sk == sk_from_json)
+
+        pk = nilql.PublicKey.generate(sk)
+        pk_loaded = nilql.PublicKey.load(pk.dump())
         self.assertTrue(isinstance(pk, nilql.PublicKey))
+        self.assertTrue(pk == pk_loaded)
+
+        pk_from_json = nilql.PublicKey.load(
+            json.loads(json.dumps(pk.dump()))
+        )
+        self.assertTrue(pk == pk_from_json)
 
     def test_key_operations_for_sum_with_multiple_nodes(self):
         """
-        Test key generation for store operation with multiple nodes.
+        Test key generate, dump, JSONify, and load for store operation
+        with multiple nodes.
         """
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
+        self.assertTrue(sk == sk_loaded)
+
+        sk_from_json = nilql.SecretKey.load(
+            json.loads(json.dumps(sk.dump()))
+        )
+        self.assertTrue(sk == sk_from_json)
 
 class TestKeysError(TestCase):
     """
