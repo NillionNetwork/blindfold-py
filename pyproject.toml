@@ -1,6 +1,6 @@
 [project]
 name = "nilql"
-version = "0.1.0"
+version = "0.0.0a5"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
 readme = "README.rst"
