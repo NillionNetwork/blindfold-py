@@ -115,6 +115,22 @@ class SecretKey(dict):
             'operations': {} or operations
         })
 
+        if (
+            not isinstance(cluster, dict) or
+            'nodes' not in cluster or
+            not isinstance(cluster['nodes'], Sequence)
+        ):
+            raise ValueError('valid cluster configuration is required')
+
+        if len(cluster['nodes']) < 1:
+            raise ValueError('cluster configuration must contain at least one node')
+
+        if (
+            (not isinstance(operations, dict)) or
+            (not set(operations.keys()).issubset({'store', 'match', 'sum'}))
+        ):
+            raise ValueError('valid operations specification is required')
+
         if len([op for (op, status) in instance['operations'].items() if status]) != 1:
             raise ValueError('secret key must support exactly one operation')
 
@@ -150,13 +166,14 @@ class PublicKey(dict):
         # specification, updating the configuration and specification with the
         # supplied arguments.
         instance = PublicKey({
-            'value': None,
             'cluster': secret_key['cluster'],
             'operations': secret_key['operations']
         })
 
         if isinstance(secret_key['value'], pailliers.secret):
             instance['value'] = pailliers.public(secret_key['value'])
+        else:
+            raise ValueError('cannot create public key for supplied secret key')
 
         return instance
 
@@ -172,50 +189,50 @@ def encrypt(
     >>> isinstance(encrypt(key, 123), str)
     True
     """
+    buffer = None
+
+    # Encode an integer for storage or matching.
+    if isinstance(plaintext, int):
+        if (
+            plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
+            plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX
+        ):
+            raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
+        buffer = _encode(plaintext)
+    elif 'sum' in key['operations']: # Non-integer cannot be encrypted for summation.
+        raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
+
+    # Encode a string for storage or matching.
+    if isinstance(plaintext, str):
+        buffer = _encode(plaintext)
+        if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
+            raise ValueError(
+                'string plaintext must be possible to encode in 4096 bytes or fewer'
+            )
+
     instance = None
 
     # Encrypt a value for storage and retrieval.
     if key['operations'].get('store'):
-        bytes_ = _encode(plaintext)
-
         if len(key['cluster']['nodes']) == 1:
             # For single-node clusters, the data is encrypted using a symmetric key.
             instance = _pack(
-                bcl.symmetric.encrypt(
-                    key['value'],
-                    bcl.plain(_encode(plaintext))
-                )
+                bcl.symmetric.encrypt(key['value'], bcl.plain(buffer))
             )
         elif len(key['cluster']['nodes']) > 1:
             # For multi-node clusters, the ciphertext is secret-shared across the nodes
             # using XOR.
             shares = []
-            aggregate = bytes(len(bytes_))
+            aggregate = bytes(len(buffer))
             for _ in range(len(key['cluster']['nodes']) - 1):
-                mask = secrets.token_bytes(len(bytes_))
+                mask = secrets.token_bytes(len(buffer))
                 aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
                 shares.append(mask)
-            shares.append(bytes(a ^ b for (a, b) in zip(aggregate, bytes_)))
+            shares.append(bytes(a ^ b for (a, b) in zip(aggregate, buffer)))
             instance = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match') and 'salt' in key['value']:
-        buffer = None
-
-        # Encrypt (i.e., hash) an integer for matching.
-        if isinstance(plaintext, int):
-            if plaintext < 0 or plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX:
-                raise ValueError('plaintext must be 32-bit nonnegative integer value')
-            buffer = plaintext.to_bytes(8, 'little')
-
-        # Encrypt (i.e., hash) a string for matching.
-        if isinstance(plaintext, str):
-            buffer = plaintext.encode()
-            if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX:
-                raise ValueError(
-                    'plaintext string must be possible to encode in 4096 bytes or fewer'
-                )
-
         instance = _pack(hashlib.sha512(key['value']['salt'] + buffer).digest())
 
         # If there are multiple nodes, prepare the same ciphertext for each.
@@ -269,22 +286,56 @@ def decrypt(
 
     If a value cannot be decrypted, an exception is raised.
 
-    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'abc': True})
-    >>> decrypt(key, encrypt(key, [1, 2, 3]))
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+    >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    ValueError: cannot decrypt supplied ciphertext using the supplied key
+    TypeError: secret key requires a valid ciphertext from a multi-node cluster
     """
+    error = ValueError(
+        'cannot decrypt supplied ciphertext using the supplied key'
+    )
+
+    # Confirm that the secret key and ciphertext have compatible clusters.
+    if len(key['cluster']['nodes']) == 1:
+        if not isinstance(ciphertext, (int, str)):
+            raise TypeError(
+              'secret key requires a valid ciphertext from a single-node cluster'
+            )
+    else:
+        if (
+            isinstance(ciphertext, str) or
+            (not isinstance(ciphertext, Sequence)) or
+            (not (
+                all(isinstance(c, int) for c in ciphertext) or
+                all(isinstance(c, str) for c in ciphertext)
+            ))
+        ):
+            raise TypeError(
+              'secret key requires a valid ciphertext from a multi-node cluster'
+            )
+
+        if (
+            isinstance(ciphertext, Sequence) and
+            len(key['cluster']['nodes']) != len(ciphertext)
+        ):
+            raise ValueError(
+              'secret key and ciphertext must have the same associated cluster size'
+            )
+
     # Decrypt a value that was encrypted for storage and retrieval.
     if key['operations'].get('store'):
         if len(key['cluster']['nodes']) == 1:
             # Single-node clusters use symmetric encryption.
-            return _decode(
-                bcl.symmetric.decrypt(
-                    key['value'],
-                    bcl.cipher(_unpack(ciphertext))
-                    )
-            )
+            try:
+                return _decode(
+                    bcl.symmetric.decrypt(
+                        key['value'],
+                        bcl.cipher(_unpack(ciphertext))
+                        )
+                )
+            except Exception as exc:
+                raise error from exc
 
         # Multi-node clusters use XOR-based secret sharing.
         shares = [_unpack(share) for share in ciphertext]
@@ -308,7 +359,7 @@ def decrypt(
 
             return total
 
-    raise ValueError('cannot decrypt supplied ciphertext using the supplied key')
+    raise error
 
 def share(document: Union[int, str, dict]) -> Sequence[dict]:
     """
