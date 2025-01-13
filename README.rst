@@ -4,7 +4,11 @@ nilql
 
 Library for working with encrypted data within nilDB queries and replies.
 
-|readthedocs| |actions|
+|pypi| |readthedocs| |actions| |coveralls|
+
+.. |pypi| image:: https://badge.fury.io/py/nilql.svg#
+   :target: https://badge.fury.io/py/nilql
+   :alt: PyPI version and link.
 
 .. |readthedocs| image:: https://readthedocs.org/projects/nilql/badge/?version=latest
    :target: https://nilql.readthedocs.io/en/latest/?badge=latest
@@ -13,6 +17,10 @@ Library for working with encrypted data within nilDB queries and replies.
 .. |actions| image:: https://github.com/nillionnetwork/nilql-py/workflows/lint-test-cover-docs/badge.svg#
    :target: https://github.com/nillionnetwork/nilql-py/actions/workflows/lint-test-cover-docs.yml
    :alt: GitHub Actions status.
+
+.. |coveralls| image:: https://coveralls.io/repos/github/nillionnetwork/nilql/badge.svg?branch=main
+   :target: https://coveralls.io/github/nillionnetwork/nilql?branch=main
+   :alt: Coveralls test coverage summary.
 
 Installation and Usage
 ----------------------
@@ -73,4 +81,6 @@ The version number format for this library and the changes to the library associ
 
 Publishing
 ^^^^^^^^^^
+This library can be published as a `package on PyPI <https://pypi.org/project/nilql>`__ via the GitHub Actions workflow found in ``.github/workflows/build-publish-sign-release.yml`` that follows the `recommendations found in the Python Packaging User Guide <https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/>`__.
+
 Ensure that any links in this README document to the Read the Docs documentation of this package (or its dependencies) have appropriate version numbers. Also ensure that the Read the Docs project for this library has an `automation rule <https://docs.readthedocs.io/en/stable/automation-rules.html>`__ that activates and sets as the default all tagged versions.
