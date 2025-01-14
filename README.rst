@@ -22,6 +22,33 @@ Library for working with encrypted data within nilDB queries and replies.
    :target: https://coveralls.io/github/NillionNetwork/nilql-py?branch=main
    :alt: Coveralls test coverage summary.
 
+Description and Purpose
+-----------------------
+This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities available in nilQL.
+
++-------------+------------+------------------------------------------------------------+------------------------------------+
+| Cluster     | Operation  | Implementation Details                                     | Supported Types                    |
++=============+============+============================================================+====================================+
+|             | store      | | XSalsa20 stream cipher                                   | | 32-bit signed integer            |
+|             |            | | Poly1305 MAC                                             | | UTF-8 string (<4097 bytes)       |
+|             +------------+------------------------------------------------------------+------------------------------------+
+| | Single    | match      | | deterministic salted hashing                             | | 32-bit signed integer            |
+| | Node      |            | | via SHA-512                                              | | UTF-8 string (<4097 bytes)       |
+|             +------------+------------------------------------------------------------+------------------------------------+
+|             | sum        | | non-deterministic Paillier                               | 32-bit signed integer              |
+|             |            | | with 2048-bit primes                                     |                                    |
++-------------+------------+------------------------------------------------------------+------------------------------------+
+|             | store      | XOR-based secret sharing                                   | | 32-bit signed integer            |
+|             |            |                                                            | | UTF-8 string (<4097 bytes)       |
+|             +------------+------------------------------------------------------------+------------------------------------+
+| | Multiple  | match      | | deterministic salted hashing                             | | 32-bit signed integer            |
+| | Nodes     |            | | via SHA-512                                              | | UTF-8 string (<4097 bytes)       |
+|             +------------+------------------------------------------------------------+------------------------------------+
+|             | sum        | | additive secret sharing                                  | 32-bit signed integer              |
+|             |            | | with modulus 2^32                                        |                                    |
++-------------+------------+------------------------------------------------------------+------------------------------------+
+
+
 Installation and Usage
 ----------------------
 The library can be imported in the usual ways:
@@ -30,6 +57,20 @@ The library can be imported in the usual ways:
 
     import nilql
     from nilql import *
+
+Example
+^^^^^^^^
+An example demonstrating use of the library is presented below:
+
+.. code-block:: python
+
+    import nilql
+    cluster = {'nodes': [{}, {}, {}]}
+    secret_key = nilql.SecretKey.generate(cluster, {'store': True})
+    plaintext = 123
+    ciphertext = nilql.encrypt(secret_key, plaintext)
+    decrypted = nilql.decrypt(secret_key, ciphertext)
+    assert(plaintext == decrypted)
 
 Development
 -----------
