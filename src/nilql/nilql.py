@@ -500,83 +500,187 @@ def decrypt(
 
     raise error
 
-def share(document: Union[int, str, dict]) -> Sequence[dict]:
+def allot(
+        document: Union[int, bool, str, list, dict]
+    ) -> Sequence[Union[int, bool, str, list, dict]]:
     """
-    Convert a document that may contain ciphertexts intended for decentralized
+    Convert a document that may contain ciphertexts intended for multi-node
     clusters into secret shares of that document. Shallow copies are created
     whenever possible.
 
     >>> d = {
     ...     'id': 0,
-    ...     'age': {'$share': [1, 2, 3]},
-    ...     'dat': {'loc': {'$share': [4, 5, 6]}}
+    ...     'age': {'$allot': [1, 2, 3]},
+    ...     'dat': {'loc': {'$allot': [4, 5, 6]}}
     ... }
-    >>> for d in share(d): print(d)
-    {'id': 0, 'age': {'%share': 1}, 'dat': {'loc': {'%share': 4}}}
-    {'id': 0, 'age': {'%share': 2}, 'dat': {'loc': {'%share': 5}}}
-    {'id': 0, 'age': {'%share': 3}, 'dat': {'loc': {'%share': 6}}}
+    >>> for d in allot(d): print(d)
+    {'id': 0, 'age': {'$share': 1}, 'dat': {'loc': {'$share': 4}}}
+    {'id': 0, 'age': {'$share': 2}, 'dat': {'loc': {'$share': 5}}}
+    {'id': 0, 'age': {'$share': 3}, 'dat': {'loc': {'$share': 6}}}
 
     A document with no ciphertexts intended for decentralized clusters is
     unmodofied; a list containing this document is returned.
 
-    >>> share({'id': 0, 'age': 23})
+    >>> allot({'id': 0, 'age': 23})
     [{'id': 0, 'age': 23}]
 
     Any attempt to convert a document that has an incorrect structure raises
     an exception.
 
-    >>> share([])
+    >>> allot(1.23)
     Traceback (most recent call last):
       ...
-    TypeError: document must be an integer, string, or dictionary
-    >>> share({'id': 0, 'age': {'$share': [1, 2, 3], 'extra': [1, 2, 3]}})
+    TypeError: integer, boolean, string, list, or dictionary expected
+    >>> allot({'id': 0, 'age': {'$allot': [1, 2, 3], 'extra': [1, 2, 3]}})
     Traceback (most recent call last):
       ...
-    ValueError: share object has incorrect structure
-    >>> share({
+    ValueError: allotment object must only have one key
+    >>> allot({
     ...     'id': 0,
-    ...     'age': {'$share': [1, 2, 3]},
-    ...     'dat': {'loc': {'$share': [4, 5]}}
+    ...     'age': {'$allot': [1, 2, 3]},
+    ...     'dat': {'loc': {'$allot': [4, 5]}}
     ... })
     Traceback (most recent call last):
       ...
-    ValueError: inconsistent share quantities in document
+    ValueError: number of shares in subdocument is not consistent
     """
     # Return a single share for integer and string values.
-    if isinstance(document, (int, str)):
+    if isinstance(document, (int, bool, str)):
         return [document]
 
-    if not isinstance(document, dict):
-        raise TypeError('document must be an integer, string, or dictionary')
+    if isinstance(document, list):
+        results = list(map(allot, document))
 
-    # Handle the relevant base case: a document containing shares that were
-    # obtained using the ``encrypt`` function.
-    keys = set(document.keys())
-    if '$share' in keys:
-        shares = document['$share']
-        if not isinstance(shares, list) or len(keys) != 1:
-            raise ValueError('share object has incorrect structure')
-        return [{'%share': s} for s in shares]
+        # Determine the number of shares that must be created.
+        multiplicity = 1
+        for result in results:
+            if len(result) != 1:
+                if multiplicity == 1:
+                    multiplicity = len(result)
+                elif multiplicity != len(result):
+                    raise ValueError("number of shares is not consistent")
 
-    # Determine the number of shares in each subdocument.
-    k_to_vs = {}
-    for k, v in document.items():
-        k_to_vs[k] = share(v)
-    quantity = max(len(vs) for vs in k_to_vs.values())
+        # Create the appropriate number of shares.
+        shares = []
+        for i in range(multiplicity):
+            share = []
+            for result in results:
+                share.append(result[0 if len(result) == 1 else i])
+            shares.append(share)
 
-    # Build each of the shares.
-    shares = [{} for _ in range(quantity)]
-    for k, vs in k_to_vs.items():
-        if len(vs) == 1:
-            for i in range(quantity):
-                shares[i][k] = vs[0]
-        elif len(vs) == quantity:
-            for i in range(quantity):
-                shares[i][k] = vs[i]
-        else:
-            raise ValueError('inconsistent share quantities in document')
+        return shares
 
-    return shares
+    if isinstance(document, dict):
+        # Document is an array of shares obtained from the ``encrypt`` function
+        # that must be allotted to nodes.
+        if '$allot' in document:
+            if len(document.keys()) != 1:
+                raise ValueError('allotment object must only have one key')
+
+            items = document['$allot']
+            if not isinstance(items, list):
+                raise ValueError('allotment object must contain list of shares')
+
+            return [{'$share': item} for item in document['$allot']]
+
+        # Document is a general-purpose key-value mapping.
+        results = {}
+        multiplicity = 1
+        for key in document:
+            result = allot(document[key])
+            results[key] = result
+            if len(result) != 1:
+                if multiplicity == 1:
+                    multiplicity = len(result)
+                elif multiplicity != len(result):
+                    raise ValueError(
+                        'number of shares in subdocument is not consistent'
+                    )
+
+        # Create the appropriate number of document shares.
+        shares = []
+        for i in range(multiplicity):
+            share = {}
+            for key in results:
+                results_for_key = results[key]
+                share[key] = results_for_key[0 if len(results_for_key) == 1 else i]
+            shares.append(share)
+
+        return shares
+
+    raise TypeError(
+        'integer, boolean, string, list, or dictionary expected'
+    )
+
+def unify(
+        secret_key: SecretKey,
+        documents: Sequence[Union[int, bool, str, list, dict]]
+    ) -> Union[int, bool, str, list, dict]:
+    """
+    Convert an object that may contain ciphertexts intended for multi-node
+    clusters into secret shares of that object. Shallow copies are created
+    whenever possible.
+
+    >>> data = {
+    ...     'a': [True, 'v', 12],
+    ...     'b': [False, 'w', 34],
+    ...     'c': [True, 'x', 56],
+    ...     'd': [False, 'y', 78],
+    ...     'e': [True, 'z', 90],
+    ... }
+    >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+    >>> encrypted = {
+    ...     'a': [True, 'v', {'$allot': encrypt(sk, 12)}],
+    ...     'b': [False, 'w', {'$allot': encrypt(sk, 34)}],
+    ...     'c': [True, 'x', {'$allot': encrypt(sk, 56)}],
+    ...     'd': [False, 'y', {'$allot': encrypt(sk, 78)}],
+    ...     'e': [True, 'z', {'$allot': encrypt(sk, 90)}],
+    ... }
+    >>> shares = allot(encrypted)
+    >>> decrypted = unify(sk, shares)
+    >>> import json
+    >>> data == decrypted
+    True
+    """
+    if len(documents) == 1:
+        return documents[0]
+
+    if all(isinstance(document, list) for document in documents):
+        length = len(documents[0])
+        if all(len(document) == length for document in documents[1:]):
+            return [
+                unify(secret_key, [share[i] for share in documents])
+                for i in range(length)
+            ]
+
+    if all(isinstance(document, dict) for document in documents):
+        # Documents are shares.
+        if all('$share' in document for document in documents):
+            return decrypt(
+                secret_key,
+                [document['$share'] for document in documents]
+            )
+
+        # Documents are general-purpose key-value mappings.
+        keys = documents[0].keys()
+        if all(document.keys() == keys for document in documents[1:]):
+            results = {}
+            for key in keys:
+                results[key] = unify(
+                    secret_key,
+                    [document[key] for document in documents]
+                )
+            return results
+
+    # Base case: all documents must be equivalent.
+    all_values_equal = True
+    for i in range(1, len(documents)):
+        all_values_equal &= documents[0] == documents[i]
+
+    if all_values_equal:
+        return documents[0]
+
+    raise TypeError('array of compatible document shares expected')
 
 if __name__ == '__main__':
     doctest.testmod() # pragma: no cover

@@ -26,7 +26,7 @@ class TestAPI(TestCase):
         """
         module = import_module('nilql.nilql')
         self.assertTrue({
-            'SecretKey', 'PublicKey', 'encrypt', 'decrypt', 'share'
+            'SecretKey', 'PublicKey', 'encrypt', 'decrypt', 'allot', 'unify'
         }.issubset(module.__dict__.keys()))
 
 class TestKeys(TestCase):
