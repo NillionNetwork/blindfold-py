@@ -310,7 +310,7 @@ class PublicKey(dict):
 def encrypt(
         key: Union[SecretKey, PublicKey],
         plaintext: Union[int, str]
-    ) -> Union[str, Sequence[str], int, Sequence[int]]:
+    ) -> Union[str, Sequence[str], Sequence[int]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
@@ -372,7 +372,7 @@ def encrypt(
     # Encrypt a numerical value for summation.
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
-            instance = pailliers.encrypt(key['material'], plaintext)
+            instance = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
         elif len(key['cluster']['nodes']) > 1:
             # Use additive secret sharing for multi-node clusters.
             shares = []
@@ -389,7 +389,7 @@ def encrypt(
 
 def decrypt(
         key: SecretKey,
-        ciphertext: Union[str, Sequence[str], int, Sequence[int]]
+        ciphertext: Union[str, Sequence[str], Sequence[int]]
     ) -> Union[bytes, int]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
@@ -437,7 +437,7 @@ def decrypt(
 
     # Confirm that the secret key and ciphertext have compatible clusters.
     if len(key['cluster']['nodes']) == 1:
-        if not isinstance(ciphertext, (int, str)):
+        if not isinstance(ciphertext, str):
             raise TypeError(
               'secret key requires a valid ciphertext from a single-node cluster'
             )
@@ -484,9 +484,13 @@ def decrypt(
 
         return _decode(bytes_)
 
+    # Decrypt a value that was encrypted fo summation.
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
-            return pailliers.decrypt(key['material'], ciphertext)
+            return pailliers.decrypt(
+                key['material'],
+                pailliers.cipher(int(ciphertext, 16))
+            )
 
         if len(key['cluster']['nodes']) > 1:
             total = 0
