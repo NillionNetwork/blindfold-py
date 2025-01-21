@@ -575,7 +575,7 @@ def allot(
         return shares
 
     if isinstance(document, dict):
-        # Document is an array of shares obtained from the ``encrypt`` function
+        # Document contains shares obtained from the ``encrypt`` function
         # that must be allotted to nodes.
         if '$allot' in document:
             if len(document.keys()) != 1:
@@ -585,10 +585,13 @@ def allot(
             if isinstance(items, list):
 
                 # Simple allotment.
-                if all(isinstance(item, (int, str)) for item in items):
+                if (
+                    all(isinstance(item, int) for item in items) or
+                    all(isinstance(item, str) for item in items)
+                ):
                     return [{'$share': item} for item in document['$allot']]
 
-                # More complex allotment with list of share lists.
+                # More complex allotment with nested lists of shares.
                 return [
                     {'$share': [share['$share'] for share in shares]}
                     for shares in allot([{'$allot': item} for item in items])
@@ -684,17 +687,17 @@ def unify(
         # Documents are shares.
         if all('$share' in document for document in documents):
 
-            # Simple share.
-            if all(
-                isinstance(document['$share'], (int, str))
-                for document in documents
+            # Simple document shares.
+            if (
+                all(isinstance(d['$share'], int) for d in documents) or
+                all(isinstance(d['$share'], str) for d in documents)
             ):
                 return decrypt(
                     secret_key,
                     [document['$share'] for document in documents]
                 )
 
-            # Share consisting of list of shares.
+            # Document shares consisting of nested lists of shares.
             return [
                 unify(
                     secret_key,
