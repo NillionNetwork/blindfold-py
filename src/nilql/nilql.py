@@ -538,7 +538,7 @@ def allot(
     >>> allot({'id': 0, 'age': {'$allot': [1, 2, 3], 'extra': [1, 2, 3]}})
     Traceback (most recent call last):
       ...
-    ValueError: allotment object must only have one key
+    ValueError: allotment must only have one key
     >>> allot({
     ...     'id': 0,
     ...     'age': {'$allot': [1, 2, 3]},
@@ -564,7 +564,7 @@ def allot(
                 elif multiplicity != len(result):
                     raise ValueError("number of shares is not consistent")
 
-        # Create the appropriate number of shares.
+        # Create and return the appropriate number of shares.
         shares = []
         for i in range(multiplicity):
             share = []
@@ -579,13 +579,20 @@ def allot(
         # that must be allotted to nodes.
         if '$allot' in document:
             if len(document.keys()) != 1:
-                raise ValueError('allotment object must only have one key')
+                raise ValueError('allotment must only have one key')
 
             items = document['$allot']
-            if not isinstance(items, list):
-                raise ValueError('allotment object must contain list of shares')
+            if isinstance(items, list):
 
-            return [{'$share': item} for item in document['$allot']]
+                # Simple allotment.
+                if all(isinstance(item, (int, str)) for item in items):
+                    return [{'$share': item} for item in document['$allot']]
+
+                # More complex allotment with list of share lists.
+                return [
+                    {'$share': [share['$share'] for share in shares]}
+                    for shares in allot([{'$allot': item} for item in items])
+                ]
 
         # Document is a general-purpose key-value mapping.
         results = {}
@@ -642,7 +649,23 @@ def unify(
     ... }
     >>> shares = allot(encrypted)
     >>> decrypted = unify(sk, shares)
-    >>> import json
+    >>> data == decrypted
+    True
+
+    It is possible to wrap nested lists of shares to reduce the overhead
+    associated with the ``{'$allot': ...}`` and ``{'$share': ...}`` wrappers.
+
+    >>> data = {
+    ...     'a': [1, [2, 3]],
+    ...     'b': [4, 5, 6],
+    ... }
+    >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+    >>> encrypted = {
+    ...     'a': {'$allot': [encrypt(sk, 1), [encrypt(sk, 2), encrypt(sk, 3)]]},
+    ...     'b': {'$allot': [encrypt(sk, 4), encrypt(sk, 5), encrypt(sk, 6)]}
+    ... }
+    >>> shares = allot(encrypted)
+    >>> decrypted = unify(sk, shares)
     >>> data == decrypted
     True
     """
@@ -660,10 +683,25 @@ def unify(
     if all(isinstance(document, dict) for document in documents):
         # Documents are shares.
         if all('$share' in document for document in documents):
-            return decrypt(
-                secret_key,
-                [document['$share'] for document in documents]
-            )
+
+            # Simple share.
+            if all(
+                isinstance(document['$share'], (int, str))
+                for document in documents
+            ):
+                return decrypt(
+                    secret_key,
+                    [document['$share'] for document in documents]
+                )
+
+            # Share consisting of list of shares.
+            return [
+                unify(
+                    secret_key,
+                    [{'$share': share} for share in shares]
+                )
+                for shares in zip(*[document['$share'] for document in documents])
+            ]
 
         # Documents are general-purpose key-value mappings.
         keys = documents[0].keys()
