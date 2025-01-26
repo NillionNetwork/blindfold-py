@@ -17,7 +17,7 @@ _PLAINTEXT_SIGNED_INTEGER_MIN = -2147483648
 _PLAINTEXT_SIGNED_INTEGER_MAX = 2147483647
 """Maximum plaintext 32-bit signed integer value that can be encrypted."""
 
-_SECRET_SHARED_SIGNED_INTEGER_MODULUS = 4294967296
+_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 """Modulus to use for additive secret sharing of 32-bit signed integers."""
 
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
@@ -98,7 +98,7 @@ def _decode(value: bytes) -> Union[int, str]:
 
 class SecretKey(dict):
     """
-    Data structure for secret key instances.
+    Data structure for all categories of secret key instances.
     """
     @staticmethod
     def generate(cluster: dict = None, operations: dict = None) -> SecretKey:
@@ -116,7 +116,7 @@ class SecretKey(dict):
         instance = SecretKey({
             'material': {},
             'cluster': cluster,
-            'operations': {} or operations
+            'operations': operations
         })
 
         if (
@@ -141,6 +141,8 @@ class SecretKey(dict):
         if instance['operations'].get('store'):
             if len(instance['cluster']['nodes']) == 1:
                 instance['material'] = bcl.symmetric.secret()
+            else:
+                instance['material'] = secrets.token_bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
 
         if instance['operations'].get('match'):
             # Salt for deterministic hashing.
@@ -149,6 +151,9 @@ class SecretKey(dict):
         if instance['operations'].get('sum'):
             if len(instance['cluster']['nodes']) == 1:
                 instance['material'] = pailliers.secret(2048)
+            else:
+                instance['material'] = \
+                    1 + secrets.randbelow(_SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
 
         return instance
 
@@ -168,10 +173,12 @@ class SecretKey(dict):
             'operations': self['operations'],
         }
 
-        if isinstance(self['material'], (bytes, bytearray)):
+        if isinstance(self['material'], int):
+            dictionary['material'] = self['material']
+        elif isinstance(self['material'], (bytes, bytearray)):
             dictionary['material'] = _pack(self['material'])
         elif self['material'] == {}:
-            pass # There is no key material for clusters with multiple nodes.
+            pass # There is no key material.
         else:
             # Secret key for Paillier encryption.
             dictionary['material'] = {
@@ -199,19 +206,20 @@ class SecretKey(dict):
             'operations': dictionary['operations'],
         })
 
-        if isinstance(dictionary['material'], str):
+        if isinstance(dictionary['material'], int):
+            secret_key['material'] = dictionary['material']
+        elif isinstance(dictionary['material'], str):
             secret_key['material'] = _unpack(dictionary['material'])
             # If this is a secret symmetric key, ensure it has the
             # expected type.
-            if 'store' in secret_key['operations']:
-                secret_key['material'] = bytes.__new__(
-                    bcl.secret,
-                    secret_key['material']
-                )
-
+            if len(secret_key['cluster']['nodes']) == 1:
+                if 'store' in secret_key['operations']:
+                    secret_key['material'] = bytes.__new__(
+                        bcl.secret,
+                        secret_key['material']
+                    )
         elif len(dictionary['material'].keys()) == 0:
-            pass # There is no key material for clusters with multiple nodes.
-
+            pass # There is no key material.
         else:
             # Secret key for Paillier encryption.
             secret_key['material'] = tuple.__new__(
@@ -226,9 +234,38 @@ class SecretKey(dict):
 
         return secret_key
 
+class ClusterKey(SecretKey):
+    """
+    Data structure for all categories of cluster key instances.
+    """
+    @staticmethod
+    def generate(cluster: dict = None, operations: dict = None) -> ClusterKey:
+        """
+        Return a cluster key built according to what is specified in the supplied
+        cluster configuration and operation list.
+
+        >>> ck = ClusterKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> isinstance(ck, ClusterKey)
+        True
+        """
+        # Create instance with default cluster configuration and operations
+        # specification, updating the configuration and specification with the
+        # supplied arguments.
+        instance = ClusterKey(SecretKey.generate(cluster, operations))
+
+        # Ensure that the secret key material is the identity value
+        # for the supported operation.
+        if len(instance['cluster']['nodes']) > 1:
+            if instance['operations'].get('store'):
+                instance['material'] = bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
+            if instance['operations'].get('sum'):
+                instance['material'] = 1
+
+        return instance
+
 class PublicKey(dict):
     """
-    Data structure for public key instances.
+    Data structure for all categories of public key instances.
     """
     @staticmethod
     def generate(secret_key: SecretKey) -> PublicKey:
@@ -337,7 +374,9 @@ def encrypt(
         buffer = _encode(plaintext)
         if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
             raise ValueError(
-                'string plaintext must be possible to encode in 4096 bytes or fewer'
+                'string plaintext must be possible to encode in ' +
+                str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
+                ' bytes or fewer'
             )
 
     instance = None
@@ -358,7 +397,10 @@ def encrypt(
                 mask = secrets.token_bytes(len(buffer))
                 aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
                 shares.append(mask)
-            shares.append(bytes(a ^ b for (a, b) in zip(aggregate, buffer)))
+            shares.append(bytes(
+                a ^ b ^ c
+                for (a, b, c) in zip(aggregate, buffer, key['material'])
+            ))
             instance = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
@@ -373,16 +415,25 @@ def encrypt(
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
             instance = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
-        elif len(key['cluster']['nodes']) > 1:
-            # Use additive secret sharing for multi-node clusters.
+        else:
+            # Use additive secret sharing for multiple-node clusters.
             shares = []
             total = 0
             for _ in range(len(key['cluster']['nodes']) - 1):
-                share_ = secrets.randbelow(_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-                shares.append(share_)
+                share_ =  secrets.randbelow(_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                shares.append(
+                    (key['material'] * share_)
+                    %
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
                 total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-            shares.append((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+            shares.append(
+                (
+                    key['material'] *
+                    ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
             instance = shares
 
     return instance
@@ -476,13 +527,13 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        # Multi-node clusters use XOR-based secret sharing.
+        # XOR-based secret sharing is used for multiple-node clusters.
         shares = [_unpack(share) for share in ciphertext]
         bytes_ = bytes(len(shares[0]))
         for share_ in shares:
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
 
-        return _decode(bytes_)
+        return _decode(bytes(a ^ b for (a, b) in zip(key['material'], bytes_)))
 
     # Decrypt a value that was encrypted fo summation.
     if key['operations'].get('sum'):
@@ -492,15 +543,23 @@ def decrypt(
                 pailliers.cipher(int(ciphertext, 16))
             )
 
-        if len(key['cluster']['nodes']) > 1:
-            total = 0
-            for share_ in ciphertext:
-                total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        # Additive secret sharing is used for multiple-node clusters.
+        inverse = pow(
+            key['material'],
+            _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
+            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        )
+        total = 0
+        for share_ in ciphertext:
+            total = (
+                total +
+                ((inverse * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-            if total > _PLAINTEXT_SIGNED_INTEGER_MAX:
-                total -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        if total > _PLAINTEXT_SIGNED_INTEGER_MAX:
+            total -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-            return total
+        return total
 
     raise error
 
@@ -562,7 +621,7 @@ def allot(
                 if multiplicity == 1:
                     multiplicity = len(result)
                 elif multiplicity != len(result):
-                    raise ValueError("number of shares is not consistent")
+                    raise ValueError('number of shares is not consistent')
 
         # Create and return the appropriate number of shares.
         shares = []
@@ -674,20 +733,20 @@ def unify(
     True
 
     The ``ignore`` parameter specifies which keys should be ignored during
-    unification. By default, ``"_created"`` and ``"_updated"`` are ignored.
+    unification. By default, ``'_created'`` and ``'_updated'`` are ignored.
 
-    >>> shares[0]["_created"] = "123"
-    >>> shares[1]["_created"] = "456"
-    >>> shares[2]["_created"] = "789"
-    >>> shares[0]["_updated"] = "ABC"
-    >>> shares[1]["_updated"] = "DEF"
-    >>> shares[2]["_updated"] = "GHI"
+    >>> shares[0]['_created'] = '123'
+    >>> shares[1]['_created'] = '456'
+    >>> shares[2]['_created'] = '789'
+    >>> shares[0]['_updated'] = 'ABC'
+    >>> shares[1]['_updated'] = 'DEF'
+    >>> shares[2]['_updated'] = 'GHI'
     >>> decrypted = unify(sk, shares)
     >>> data == decrypted
     True
     """
     if ignore is None:
-        ignore = ["_created", "_updated"]
+        ignore = ['_created', '_updated']
 
     if len(documents) == 1:
         return documents[0]

@@ -26,7 +26,8 @@ class TestAPI(TestCase):
         """
         module = import_module('nilql.nilql')
         self.assertTrue({
-            'SecretKey', 'PublicKey', 'encrypt', 'decrypt', 'allot', 'unify'
+            'SecretKey', 'ClusterKey', 'PublicKey',
+            'encrypt', 'decrypt', 'allot', 'unify'
         }.issubset(module.__dict__.keys()))
 
 class TestKeys(TestCase):
@@ -211,10 +212,10 @@ class TestCiphertextRepresentations(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'store': True}
-        sk = nilql.SecretKey.generate(cluster, operations)
+        ck = nilql.ClusterKey.generate(cluster, operations)
         plaintext = 'abc'
         ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
-        decrypted = nilql.decrypt(sk, ciphertext)
+        decrypted = nilql.decrypt(ck, ciphertext)
         self.assertTrue(plaintext == decrypted)
 
     def test_ciphertext_representation_for_sum_with_multiple_nodes(self):
@@ -223,10 +224,10 @@ class TestCiphertextRepresentations(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'sum': True}
-        sk = nilql.SecretKey.generate(cluster, operations)
+        ck = nilql.ClusterKey.generate(cluster, operations)
         plaintext = 123
-        ciphertext = [456, 246, 4294967296 - 123 - 456]
-        decrypted = nilql.decrypt(sk, ciphertext)
+        ciphertext = [456, 246, 4294967296 + 15 - 123 - 456]
+        decrypted = nilql.decrypt(ck, ciphertext)
         self.assertTrue(plaintext == decrypted)
 
 class TestFunctionsErrors(TestCase):
@@ -244,7 +245,7 @@ class TestFunctionsErrors(TestCase):
             cluster = {'nodes': [{}]}
             operations = {'store': True}
             sk = nilql.SecretKey.generate(cluster, operations)
-            plaintext = 2**32
+            plaintext = 2 ** 32
             nilql.encrypt(sk, plaintext)
 
     def test_encrypt_of_str_for_store_error(self):
@@ -272,7 +273,7 @@ class TestFunctionsErrors(TestCase):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
             sk = nilql.SecretKey.generate(cluster, operations)
-            plaintext = 2**32
+            plaintext = 2 ** 32
             nilql.encrypt(sk, plaintext)
 
     def test_encrypt_of_str_for_match_error(self):
@@ -351,3 +352,23 @@ class TestFunctionsErrors(TestCase):
             plaintext = 123
             ciphertext = nilql.encrypt(sk, plaintext)
             nilql.decrypt(sk_alt, ciphertext)
+
+class TestSecureComputations(TestCase):
+    """
+    Tests consisting of end-to-end workflows involving secure computation.
+    """
+    def test_workflow_for_secure_sum_with_multiple_nodes(self):
+        """
+        Test secure summation workflow for a cluster that has multiple nodes.
+        """
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        (a0, b0, c0) = nilql.encrypt(sk, 123)
+        (a1, b1, c1) = nilql.encrypt(sk, 456)
+        (a2, b2, c2) = nilql.encrypt(sk, 789)
+        (a3, b3, c3) = (
+            (a0 + a1 + a2) % (2 ** 32 + 15),
+            (b0 + b1 + b2) % (2 ** 32 + 15),
+            (c0 + c1 + c2) % (2 ** 32 + 15)
+        )
+        decrypted = nilql.decrypt(sk, [a3, b3, c3])
+        self.assertTrue(decrypted == 123 + 456 + 789)
