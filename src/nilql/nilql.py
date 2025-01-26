@@ -628,7 +628,8 @@ def allot(
 
 def unify(
         secret_key: SecretKey,
-        documents: Sequence[Union[int, bool, str, list, dict]]
+        documents: Sequence[Union[int, bool, str, list, dict]],
+        ignore: Sequence[str] = None
     ) -> Union[int, bool, str, list, dict]:
     """
     Convert an object that may contain ciphertexts intended for multi-node
@@ -671,7 +672,23 @@ def unify(
     >>> decrypted = unify(sk, shares)
     >>> data == decrypted
     True
+
+    The ``ignore`` parameter specifies which keys should be ignored during
+    unification. By default, ``"_created"`` and ``"_updated"`` are ignored.
+
+    >>> shares[0]["_created"] = "123"
+    >>> shares[1]["_created"] = "456"
+    >>> shares[2]["_created"] = "789"
+    >>> shares[0]["_updated"] = "ABC"
+    >>> shares[1]["_updated"] = "DEF"
+    >>> shares[2]["_updated"] = "GHI"
+    >>> decrypted = unify(sk, shares)
+    >>> data == decrypted
+    True
     """
+    if ignore is None:
+        ignore = ["_created", "_updated"]
+
     if len(documents) == 1:
         return documents[0]
 
@@ -679,7 +696,7 @@ def unify(
         length = len(documents[0])
         if all(len(document) == length for document in documents[1:]):
             return [
-                unify(secret_key, [share[i] for share in documents])
+                unify(secret_key, [share[i] for share in documents], ignore)
                 for i in range(length)
             ]
 
@@ -701,7 +718,8 @@ def unify(
             return [
                 unify(
                     secret_key,
-                    [{'$share': share} for share in shares]
+                    [{'$share': share} for share in shares],
+                    ignore
                 )
                 for shares in zip(*[document['$share'] for document in documents])
             ]
@@ -709,11 +727,15 @@ def unify(
         # Documents are general-purpose key-value mappings.
         keys = documents[0].keys()
         if all(document.keys() == keys for document in documents[1:]):
+            # For ignored keys, unification is not performed and
+            # they are omitted from the results.
+            keys = [key for key in keys if key not in ignore]
             results = {}
             for key in keys:
                 results[key] = unify(
                     secret_key,
-                    [document[key] for document in documents]
+                    [document[key] for document in documents],
+                    ignore
                 )
             return results
 
