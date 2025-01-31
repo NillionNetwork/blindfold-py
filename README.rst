@@ -45,7 +45,7 @@ This library provides cryptographic operations that are compatible with nilDB no
 | | nodes     |            | | via SHA-512                      | | UTF-8 string (<4097 bytes)       |
 |             +------------+------------------------------------+------------------------------------+
 |             | sum        | | additive secret sharing          | 32-bit signed integer              |
-|             |            | | with modulus 2^32                |                                    |
+|             |            | | (prime modulus 2^32 + 15)        |                                    |
 +-------------+------------+------------------------------------+------------------------------------+
 
 Installation and Usage
