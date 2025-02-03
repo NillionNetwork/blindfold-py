@@ -187,7 +187,7 @@ class SecretKey(dict):
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
-        instance = SecretKey({
+        secret_key = SecretKey({
             'material': {},
             'cluster': cluster,
             'operations': operations
@@ -209,12 +209,12 @@ class SecretKey(dict):
         ):
             raise ValueError('valid operations specification is required')
 
-        if len([op for (op, status) in instance['operations'].items() if status]) != 1:
+        if len([op for (op, status) in secret_key['operations'].items() if status]) != 1:
             raise ValueError('secret key must support exactly one operation')
 
-        if instance['operations'].get('store'):
-            if len(instance['cluster']['nodes']) == 1:
-                instance['material'] = (
+        if secret_key['operations'].get('store'):
+            if len(secret_key['cluster']['nodes']) == 1:
+                secret_key['material'] = (
                     bcl.symmetric.secret()
                     if seed is None else
                     bytes.__new__(
@@ -223,32 +223,32 @@ class SecretKey(dict):
                     )
                 )
             else:
-                instance['material'] = _random_bytes(
+                secret_key['material'] = _random_bytes(
                     _PLAINTEXT_STRING_BUFFER_LEN_MAX,
                     seed
                 )
 
-        if instance['operations'].get('match'):
+        if secret_key['operations'].get('match'):
             # Salt for deterministic hashing.
-            instance['material'] = _random_bytes(64, seed)
+            secret_key['material'] = _random_bytes(64, seed)
 
-        if instance['operations'].get('sum'):
-            if len(instance['cluster']['nodes']) == 1:
+        if secret_key['operations'].get('sum'):
+            if len(secret_key['cluster']['nodes']) == 1:
                 if seed is not None:
                     raise RuntimeError(
                         'seed-based derivation of summation-compatible keys ' +
                         'is not supported for single-node clusters'
                     )
-                instance['material'] = pailliers.secret(2048)
+                secret_key['material'] = pailliers.secret(2048)
             else:
-                instance['material'] = \
+                secret_key['material'] = \
                     _random_int(
                         1,
                         _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1,
                         seed
                     )
 
-        return instance
+        return secret_key
 
     def dump(self: SecretKey) -> dict:
         """
@@ -347,17 +347,17 @@ class ClusterKey(SecretKey):
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
-        instance = ClusterKey(SecretKey.generate(cluster, operations))
+        cluster_key = ClusterKey(SecretKey.generate(cluster, operations))
 
         # Ensure that the secret key material is the identity value
         # for the supported operation.
-        if len(instance['cluster']['nodes']) > 1:
-            if instance['operations'].get('store'):
-                instance['material'] = bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
-            if instance['operations'].get('sum'):
-                instance['material'] = 1
+        if len(cluster_key['cluster']['nodes']) > 1:
+            if cluster_key['operations'].get('store'):
+                cluster_key['material'] = bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
+            if cluster_key['operations'].get('sum'):
+                cluster_key['material'] = 1
 
-        return instance
+        return cluster_key
 
 class PublicKey(dict):
     """
@@ -376,17 +376,17 @@ class PublicKey(dict):
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
-        instance = PublicKey({
+        public_key = PublicKey({
             'cluster': secret_key['cluster'],
             'operations': secret_key['operations']
         })
 
         if isinstance(secret_key['material'], pailliers.secret):
-            instance['material'] = pailliers.public(secret_key['material'])
+            public_key['material'] = pailliers.public(secret_key['material'])
         else:
             raise ValueError('cannot create public key for supplied secret key')
 
-        return instance
+        return public_key
 
     def dump(self: PublicKey) -> dict:
         """
@@ -475,13 +475,13 @@ def encrypt(
                 ' bytes or fewer'
             )
 
-    instance = None
+    ciphertext = None
 
     # Encrypt a value for storage and retrieval.
     if key['operations'].get('store'):
         if len(key['cluster']['nodes']) == 1:
             # For single-node clusters, the data is encrypted using a symmetric key.
-            instance = _pack(
+            ciphertext = _pack(
                 bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
         elif len(key['cluster']['nodes']) > 1:
@@ -497,20 +497,20 @@ def encrypt(
                 a ^ b ^ c
                 for (a, b, c) in zip(aggregate, buffer, key['material'])
             ))
-            instance = list(map(_pack, shares))
+            ciphertext = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match'):
-        instance = _pack(hashlib.sha512(key['material'] + buffer).digest())
+        ciphertext = _pack(hashlib.sha512(key['material'] + buffer).digest())
 
         # If there are multiple nodes, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
-            instance = [instance for _ in key['cluster']['nodes']]
+            ciphertext = [ciphertext for _ in key['cluster']['nodes']]
 
     # Encrypt a numerical value for summation.
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
-            instance = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
+            ciphertext = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
         else:
             # Use additive secret sharing for multiple-node clusters.
             shares = []
@@ -530,9 +530,9 @@ def encrypt(
                     ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
                 ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
-            instance = shares
+            ciphertext = shares
 
-    return instance
+    return ciphertext
 
 def decrypt(
         key: SecretKey,
@@ -645,17 +645,17 @@ def decrypt(
             _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
             _SECRET_SHARED_SIGNED_INTEGER_MODULUS
         )
-        total = 0
+        plaintext = 0
         for share_ in ciphertext:
-            total = (
-                total +
+            plaintext = (
+                plaintext +
                 ((inverse * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
             ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-        if total > _PLAINTEXT_SIGNED_INTEGER_MAX:
-            total -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
+            plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-        return total
+        return plaintext
 
     raise error
 
