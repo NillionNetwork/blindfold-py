@@ -284,7 +284,7 @@ class SecretKey(dict):
         return dictionary
 
     @staticmethod
-    def load(dictionary: SecretKey) -> dict:
+    def load(dictionary: dict) -> SecretKey:
         """
         Create an instance from its JSON-compatible dictionary
         representation.
@@ -358,6 +358,19 @@ class ClusterKey(SecretKey):
                 cluster_key['material'] = 1
 
         return cluster_key
+
+    @staticmethod
+    def load(dictionary: dict) -> ClusterKey:
+        """
+        Create an instance from its JSON-compatible dictionary
+        representation.
+
+        >>> ck = ClusterKey.generate({'nodes': [{}]}, {'store': True})
+        >>> ck == ClusterKey.load(ck.dump())
+        True
+        """
+        secret_key = SecretKey.load(dictionary)
+        return ClusterKey(secret_key)
 
 class PublicKey(dict):
     """
