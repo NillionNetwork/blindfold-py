@@ -1,19 +1,37 @@
 """
 Test suite containing functional unit tests of exported functions.
 """
+from typing import Union
 from unittest import TestCase
 from importlib import import_module
 import json
+import base64
+import hashlib
 import pytest
 
 import nilql
 
-secret_key_for_sum_with_one_node = nilql.SecretKey.generate(
+def to_hash_base64(output: Union[bytes, int]) -> str:
+    """
+    Helper function for converting a large binary output from a test into a
+    short hash.
+    """
+    if isinstance(output, int):
+        output = output.to_bytes(8, 'little')
+
+    return base64.b64encode(hashlib.sha256(output).digest()).decode('ascii')
+
+SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE = nilql.SecretKey.generate(
   {'nodes': [{}]},
   {'sum': True}
 )
 """
-Precomputed constants that can be reused to reduce running time of tests.
+Precomputed constant that can be reused to reduce running time of tests.
+"""
+
+SEED = "012345678901234567890123456789012345678901234567890123456789"
+"""
+Seed used for tests confirming that key generation from seeds is consistent.
 """
 
 class TestAPI(TestCase):
@@ -104,6 +122,81 @@ class TestKeys(TestCase):
         )
         self.assertTrue(sk == sk_from_json)
 
+    def test_key_from_seed_for_store_with_single_node(self):
+        """
+        Test key generation from seed for store operation with a single node.
+        """
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True}, SEED)
+        self.assertEqual(
+            to_hash_base64(sk_from_seed['material']),
+            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
+        )
+        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
+        self.assertNotEqual(
+            to_hash_base64(sk['material']),
+            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
+        )
+
+    def test_key_from_seed_for_store_with_multiple_nodes(self):
+        """
+        Test key generation from seed for store operation with multiple nodes.
+        """
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, SEED)
+        self.assertEqual(
+            to_hash_base64(sk_from_seed['material']),
+            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+        )
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        self.assertNotEqual(
+            to_hash_base64(sk['material']),
+            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+        )
+
+    def test_key_from_seed_for_match_with_single_node(self):
+        """
+        Test key generation from seed for match operation with a single node.
+        """
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True}, SEED)
+        self.assertEqual(
+            to_hash_base64(sk_from_seed['material']),
+            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+        )
+        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True})
+        self.assertNotEqual(
+            to_hash_base64(sk['material']),
+            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+        )
+
+    def test_key_from_seed_for_match_with_multiple_nodes(self):
+        """
+        Test key generation from seed for match operation with a single node.
+        """
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, SEED)
+        self.assertEqual(
+            to_hash_base64(sk_from_seed['material']),
+            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+        )
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
+        self.assertNotEqual(
+            to_hash_base64(sk['material']),
+            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+        )
+
+    def test_key_from_seed_for_sum_with_multiple_nodes(self):
+        """
+        Test key generation from seed for sum operation with multiple nodes.
+        """
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, SEED)
+        self.assertEqual(
+            to_hash_base64(sk_from_seed['material']),
+            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+        )
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        self.assertNotEqual(
+            to_hash_base64(sk['material']),
+            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+        )
+
 class TestKeysError(TestCase):
     """
     Tests of errors thrown by methods of cryptographic key classes.
@@ -185,7 +278,7 @@ class TestFunctions(TestCase):
         """
         Test encryption and decryption for sum operation with a single node.
         """
-        sk = secret_key_for_sum_with_one_node
+        sk = SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE
         pk = nilql.PublicKey.generate(sk)
         plaintext = 123
         ciphertext = nilql.encrypt(pk, plaintext)

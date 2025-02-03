@@ -3,7 +3,7 @@ Python library for working with encrypted data within nilDB queries and
 replies.
 """
 from __future__ import annotations
-from typing import Union, Sequence
+from typing import Union, Optional, Sequence
 import doctest
 import base64
 import secrets
@@ -22,6 +22,72 @@ _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
+
+def _seeds(seed: bytes, index: int) -> bytes:
+    """
+    Generate entries in an indexed sequence of seeds derived from a base seed.
+    """
+    if index < 0 or index >= 2 ** 64:
+        raise ValueError('index must be a 64-bit unsigned integer value')
+
+    return hashlib.sha512(seed + index.to_bytes(8, 'little')).digest()
+
+def _random_bytes(length: int, seed: Optional[bytes] = None) -> bytes:
+    """
+    Return a random :obj:`bytes` value of the specified length (using
+    the seed if one is supplied).
+    """
+    if seed is not None:
+        bytes_ = bytes()
+        iterations = (length // 64) + (1 if length % 64 > 0 else 0)
+        for i in range(iterations):
+            bytes_ = bytes_ + _seeds(seed, i)
+        return bytes_[:length]
+
+    return secrets.token_bytes(length)
+
+def _random_int(
+        minimum: int,
+        maximum: int,
+        seed: Optional[bytes] = None
+    ) -> int:
+    """
+    Return a random integer value within the specified range (using
+    the seed if one is supplied).
+    """
+    if minimum < 0 or minimum > 1:
+        raise ValueError('minimum must be 0 or 1')
+
+    if maximum <= minimum or maximum >= _SECRET_SHARED_SIGNED_INTEGER_MODULUS:
+        raise ValueError(
+          'maximum must be greater than the minimum and less than the modulus'
+        )
+
+    # Deterministically generate an integer in the specified range
+    # using the supplied seed. This specific technique is implemented
+    # explicitly for compatibility with corresponding libraries for
+    # other languages and platforms.
+    if seed is not None:
+        range_ = maximum - minimum
+        integer = None
+        index = 0
+        while integer is None or integer > range_:
+            bytes_ = bytearray(_random_bytes(
+              8,
+              None if seed is None else _seeds(seed, index)
+            ))
+            index += 1
+            bytes_[4] &= 1
+            bytes_[5] &= 0
+            bytes_[6] &= 0
+            bytes_[7] &= 0
+            small = int.from_bytes(bytes_[:4], 'little')
+            large = int.from_bytes(bytes_[4:], 'little')
+            integer = small + large * (2 ** 32)
+
+        return minimum + integer
+
+    return minimum + secrets.randbelow(maximum + 1 - minimum)
 
 def _pack(b: bytes) -> str:
     """
@@ -101,7 +167,11 @@ class SecretKey(dict):
     Data structure for all categories of secret key instances.
     """
     @staticmethod
-    def generate(cluster: dict = None, operations: dict = None) -> SecretKey:
+    def generate(
+        cluster: dict = None,
+        operations: dict = None,
+        seed: Union[bytes, bytearray, str] = None
+    ) -> SecretKey:
         """
         Return a secret key built according to what is specified in the supplied
         cluster configuration and operation list.
@@ -110,6 +180,10 @@ class SecretKey(dict):
         >>> isinstance(sk, SecretKey)
         True
         """
+        # Normalize type of seed argument.
+        if isinstance(seed, str):
+            seed = seed.encode()
+
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
@@ -140,20 +214,39 @@ class SecretKey(dict):
 
         if instance['operations'].get('store'):
             if len(instance['cluster']['nodes']) == 1:
-                instance['material'] = bcl.symmetric.secret()
+                instance['material'] = (
+                    bcl.symmetric.secret()
+                    if seed is None else
+                    bytes.__new__(
+                        bcl.secret,
+                        _random_bytes(32, seed)
+                    )
+                )
             else:
-                instance['material'] = secrets.token_bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
+                instance['material'] = _random_bytes(
+                    _PLAINTEXT_STRING_BUFFER_LEN_MAX,
+                    seed
+                )
 
         if instance['operations'].get('match'):
             # Salt for deterministic hashing.
-            instance['material'] = secrets.token_bytes(64)
+            instance['material'] = _random_bytes(64, seed)
 
         if instance['operations'].get('sum'):
             if len(instance['cluster']['nodes']) == 1:
+                if seed is not None:
+                    raise RuntimeError(
+                        'seed-based derivation of summation-compatible keys ' +
+                        'is not supported for single-node clusters'
+                    )
                 instance['material'] = pailliers.secret(2048)
             else:
                 instance['material'] = \
-                    1 + secrets.randbelow(_SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
+                    _random_int(
+                        1,
+                        _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1,
+                        seed
+                    )
 
         return instance
 
@@ -239,7 +332,10 @@ class ClusterKey(SecretKey):
     Data structure for all categories of cluster key instances.
     """
     @staticmethod
-    def generate(cluster: dict = None, operations: dict = None) -> ClusterKey:
+    def generate( # pylint: disable=arguments-differ # Seeds not supported.
+        cluster: dict = None,
+        operations: dict = None
+    ) -> ClusterKey:
         """
         Return a cluster key built according to what is specified in the supplied
         cluster configuration and operation list.
@@ -394,7 +490,7 @@ def encrypt(
             shares = []
             aggregate = bytes(len(buffer))
             for _ in range(len(key['cluster']['nodes']) - 1):
-                mask = secrets.token_bytes(len(buffer))
+                mask = _random_bytes(len(buffer))
                 aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
                 shares.append(mask)
             shares.append(bytes(
@@ -420,7 +516,7 @@ def encrypt(
             shares = []
             total = 0
             for _ in range(len(key['cluster']['nodes']) - 1):
-                share_ =  secrets.randbelow(_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
                 shares.append(
                     (key['material'] * share_)
                     %
