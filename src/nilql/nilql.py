@@ -702,7 +702,7 @@ def allot(
     >>> allot(1.23)
     Traceback (most recent call last):
       ...
-    TypeError: integer, boolean, string, list, or dictionary expected
+    TypeError: integer, boolean, string, list, dictionary, or None expected
     >>> allot({'id': 0, 'age': {'$allot': [1, 2, 3], 'extra': [1, 2, 3]}})
     Traceback (most recent call last):
       ...
@@ -716,8 +716,8 @@ def allot(
       ...
     ValueError: number of shares in subdocument is not consistent
     """
-    # Return a single share for integer and string values.
-    if isinstance(document, (int, bool, str)):
+    # Values and ``None`` are base cases; return a single share.
+    if isinstance(document, (int, bool, str)) or document is None:
         return [document]
 
     if isinstance(document, list):
@@ -791,7 +791,7 @@ def allot(
         return shares
 
     raise TypeError(
-        'integer, boolean, string, list, or dictionary expected'
+        'integer, boolean, string, list, dictionary, or None expected'
     )
 
 def unify(
@@ -830,11 +830,13 @@ def unify(
     >>> data = {
     ...     'a': [1, [2, 3]],
     ...     'b': [4, 5, 6],
+    ...     'c': None
     ... }
     >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
     >>> encrypted = {
     ...     'a': {'$allot': [encrypt(sk, 1), [encrypt(sk, 2), encrypt(sk, 3)]]},
-    ...     'b': {'$allot': [encrypt(sk, 4), encrypt(sk, 5), encrypt(sk, 6)]}
+    ...     'b': {'$allot': [encrypt(sk, 4), encrypt(sk, 5), encrypt(sk, 6)]},
+    ...     'c': None
     ... }
     >>> shares = allot(encrypted)
     >>> decrypted = unify(sk, shares)
