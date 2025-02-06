@@ -717,13 +717,13 @@ def allot(
 
     >>> d = {
     ...     'id': 0,
-    ...     'age': {'$allot': [1, 2, 3]},
-    ...     'dat': {'loc': {'$allot': [4, 5, 6]}}
+    ...     'age': {'%allot': [1, 2, 3]},
+    ...     'dat': {'loc': {'%allot': [4, 5, 6]}}
     ... }
     >>> for d in allot(d): print(d)
-    {'id': 0, 'age': {'$share': 1}, 'dat': {'loc': {'$share': 4}}}
-    {'id': 0, 'age': {'$share': 2}, 'dat': {'loc': {'$share': 5}}}
-    {'id': 0, 'age': {'$share': 3}, 'dat': {'loc': {'$share': 6}}}
+    {'id': 0, 'age': {'%share': 1}, 'dat': {'loc': {'%share': 4}}}
+    {'id': 0, 'age': {'%share': 2}, 'dat': {'loc': {'%share': 5}}}
+    {'id': 0, 'age': {'%share': 3}, 'dat': {'loc': {'%share': 6}}}
 
     A document with no ciphertexts intended for decentralized clusters is
     unmodofied; a list containing this document is returned.
@@ -738,14 +738,14 @@ def allot(
     Traceback (most recent call last):
       ...
     TypeError: integer, boolean, string, list, dictionary, or None expected
-    >>> allot({'id': 0, 'age': {'$allot': [1, 2, 3], 'extra': [1, 2, 3]}})
+    >>> allot({'id': 0, 'age': {'%allot': [1, 2, 3], 'extra': [1, 2, 3]}})
     Traceback (most recent call last):
       ...
     ValueError: allotment must only have one key
     >>> allot({
     ...     'id': 0,
-    ...     'age': {'$allot': [1, 2, 3]},
-    ...     'dat': {'loc': {'$allot': [4, 5]}}
+    ...     'age': {'%allot': [1, 2, 3]},
+    ...     'dat': {'loc': {'%allot': [4, 5]}}
     ... })
     Traceback (most recent call last):
       ...
@@ -780,11 +780,11 @@ def allot(
     if isinstance(document, dict):
         # Document contains shares obtained from the ``encrypt`` function
         # that must be allotted to nodes.
-        if '$allot' in document:
+        if '%allot' in document:
             if len(document.keys()) != 1:
                 raise ValueError('allotment must only have one key')
 
-            items = document['$allot']
+            items = document['%allot']
             if isinstance(items, list):
 
                 # Simple allotment.
@@ -792,12 +792,12 @@ def allot(
                     all(isinstance(item, int) for item in items) or
                     all(isinstance(item, str) for item in items)
                 ):
-                    return [{'$share': item} for item in document['$allot']]
+                    return [{'%share': item} for item in document['%allot']]
 
                 # More complex allotment with nested lists of shares.
                 return [
-                    {'$share': [share['$share'] for share in shares]}
-                    for shares in allot([{'$allot': item} for item in items])
+                    {'%share': [share['%share'] for share in shares]}
+                    for shares in allot([{'%allot': item} for item in items])
                 ]
 
         # Document is a general-purpose key-value mapping.
@@ -848,11 +848,11 @@ def unify(
     ... }
     >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
     >>> encrypted = {
-    ...     'a': [True, 'v', {'$allot': encrypt(sk, 12)}],
-    ...     'b': [False, 'w', {'$allot': encrypt(sk, 34)}],
-    ...     'c': [True, 'x', {'$allot': encrypt(sk, 56)}],
-    ...     'd': [False, 'y', {'$allot': encrypt(sk, 78)}],
-    ...     'e': [True, 'z', {'$allot': encrypt(sk, 90)}],
+    ...     'a': [True, 'v', {'%allot': encrypt(sk, 12)}],
+    ...     'b': [False, 'w', {'%allot': encrypt(sk, 34)}],
+    ...     'c': [True, 'x', {'%allot': encrypt(sk, 56)}],
+    ...     'd': [False, 'y', {'%allot': encrypt(sk, 78)}],
+    ...     'e': [True, 'z', {'%allot': encrypt(sk, 90)}],
     ... }
     >>> shares = allot(encrypted)
     >>> decrypted = unify(sk, shares)
@@ -860,7 +860,7 @@ def unify(
     True
 
     It is possible to wrap nested lists of shares to reduce the overhead
-    associated with the ``{'$allot': ...}`` and ``{'$share': ...}`` wrappers.
+    associated with the ``{'%allot': ...}`` and ``{'%share': ...}`` wrappers.
 
     >>> data = {
     ...     'a': [1, [2, 3]],
@@ -869,8 +869,8 @@ def unify(
     ... }
     >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
     >>> encrypted = {
-    ...     'a': {'$allot': [encrypt(sk, 1), [encrypt(sk, 2), encrypt(sk, 3)]]},
-    ...     'b': {'$allot': [encrypt(sk, 4), encrypt(sk, 5), encrypt(sk, 6)]},
+    ...     'a': {'%allot': [encrypt(sk, 1), [encrypt(sk, 2), encrypt(sk, 3)]]},
+    ...     'b': {'%allot': [encrypt(sk, 4), encrypt(sk, 5), encrypt(sk, 6)]},
     ...     'c': None
     ... }
     >>> shares = allot(encrypted)
@@ -907,26 +907,26 @@ def unify(
 
     if all(isinstance(document, dict) for document in documents):
         # Documents are shares.
-        if all('$share' in document for document in documents):
+        if all('%share' in document for document in documents):
 
             # Simple document shares.
             if (
-                all(isinstance(d['$share'], int) for d in documents) or
-                all(isinstance(d['$share'], str) for d in documents)
+                all(isinstance(d['%share'], int) for d in documents) or
+                all(isinstance(d['%share'], str) for d in documents)
             ):
                 return decrypt(
                     secret_key,
-                    [document['$share'] for document in documents]
+                    [document['%share'] for document in documents]
                 )
 
             # Document shares consisting of nested lists of shares.
             return [
                 unify(
                     secret_key,
-                    [{'$share': share} for share in shares],
+                    [{'%share': share} for share in shares],
                     ignore
                 )
-                for shares in zip(*[document['$share'] for document in documents])
+                for shares in zip(*[document['%share'] for document in documents])
             ]
 
         # Documents are general-purpose key-value mappings.
