@@ -213,27 +213,20 @@ class SecretKey(dict):
             raise ValueError('secret key must support exactly one operation')
 
         if secret_key['operations'].get('store'):
-            if len(secret_key['cluster']['nodes']) == 1:
-                secret_key['material'] = (
-                    bcl.symmetric.secret()
-                    if seed is None else
-                    bytes.__new__(
-                        bcl.secret,
-                        _random_bytes(32, seed)
-                    )
-                )
-            else:
-                secret_key['material'] = _random_bytes(
-                    _PLAINTEXT_STRING_BUFFER_LEN_MAX,
-                    seed
-                )
+            # Symmetric key for encrypting the plaintext or the shares of a plaintext.
+            secret_key['material'] = (
+                bcl.symmetric.secret()
+                if seed is None else
+                bytes.__new__(bcl.secret, _random_bytes(32, seed))
+            )
 
         if secret_key['operations'].get('match'):
-            # Salt for deterministic hashing.
+            # Salt for deterministic hashing of the plaintext.
             secret_key['material'] = _random_bytes(64, seed)
 
         if secret_key['operations'].get('sum'):
             if len(secret_key['cluster']['nodes']) == 1:
+                # Paillier secret key for encrypting a plaintext numeric value.
                 if seed is not None:
                     raise RuntimeError(
                         'seed-based derivation of summation-compatible keys ' +
@@ -241,12 +234,15 @@ class SecretKey(dict):
                     )
                 secret_key['material'] = pailliers.secret(2048)
             else:
-                secret_key['material'] = \
+                # Multiplicative masks to be used on the shares for each node.
+                secret_key['material'] = [
                     _random_int(
                         1,
                         _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1,
-                        seed
+                        _seeds(seed, i) if seed is not None else None
                     )
+                    for i in range(len(secret_key['cluster']['nodes']))
+                ]
 
         return secret_key
 
@@ -266,12 +262,12 @@ class SecretKey(dict):
             'operations': self['operations'],
         }
 
-        if isinstance(self['material'], int):
-            dictionary['material'] = self['material']
+        if isinstance(self['material'], list):
+            # Additive secret sharing node-specific masks.
+            if all(isinstance(k, int) for k in self['material']):
+                dictionary['material'] = self['material']
         elif isinstance(self['material'], (bytes, bytearray)):
             dictionary['material'] = _pack(self['material'])
-        elif self['material'] == {}:
-            pass # There is no key material.
         else:
             # Secret key for Paillier encryption.
             dictionary['material'] = {
@@ -299,20 +295,19 @@ class SecretKey(dict):
             'operations': dictionary['operations'],
         })
 
-        if isinstance(dictionary['material'], int):
-            secret_key['material'] = dictionary['material']
+        if isinstance(dictionary['material'], list):
+            # Additive secret sharing node-specific masks.
+            if all(isinstance(k, int) for k in dictionary['material']):
+                secret_key['material'] = dictionary['material']
         elif isinstance(dictionary['material'], str):
             secret_key['material'] = _unpack(dictionary['material'])
             # If this is a secret symmetric key, ensure it has the
             # expected type.
-            if len(secret_key['cluster']['nodes']) == 1:
-                if 'store' in secret_key['operations']:
-                    secret_key['material'] = bytes.__new__(
-                        bcl.secret,
-                        secret_key['material']
-                    )
-        elif len(dictionary['material'].keys()) == 0:
-            pass # There is no key material.
+            if 'store' in secret_key['operations']:
+                secret_key['material'] = bytes.__new__(
+                    bcl.secret,
+                    secret_key['material']
+                )
         else:
             # Secret key for Paillier encryption.
             secret_key['material'] = tuple.__new__(
@@ -340,22 +335,28 @@ class ClusterKey(SecretKey):
         Return a cluster key built according to what is specified in the supplied
         cluster configuration and operation list.
 
-        >>> ck = ClusterKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         >>> isinstance(ck, ClusterKey)
         True
+
+        Cluster keys can only be created for clusters that have two or more nodes.
+
+        >>> ClusterKey.generate({'nodes': [{}]}, {'store': True})
+        Traceback (most recent call last):
+          ...
+        ValueError: cluster configuration must have at least two nodes
         """
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
         cluster_key = ClusterKey(SecretKey.generate(cluster, operations))
 
-        # Ensure that the secret key material is the identity value
-        # for the supported operation.
-        if len(cluster_key['cluster']['nodes']) > 1:
-            if cluster_key['operations'].get('store'):
-                cluster_key['material'] = bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
-            if cluster_key['operations'].get('sum'):
-                cluster_key['material'] = 1
+        if len(cluster_key['cluster']['nodes']) == 1:
+            raise ValueError('cluster configuration must have at least two nodes')
+
+        # Cluster keys contain no cryptographic material.
+        if 'material' in cluster_key:
+            del cluster_key['material']
 
         return cluster_key
 
@@ -365,12 +366,29 @@ class ClusterKey(SecretKey):
         Create an instance from its JSON-compatible dictionary
         representation.
 
-        >>> ck = ClusterKey.generate({'nodes': [{}]}, {'store': True})
+        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
         >>> ck == ClusterKey.load(ck.dump())
         True
         """
-        secret_key = SecretKey.load(dictionary)
-        return ClusterKey(secret_key)
+        return ClusterKey({
+            'cluster': dictionary['cluster'],
+            'operations': dictionary['operations'],
+        })
+
+    def dump(self: ClusterKey) -> dict:
+        """
+        Return a JSON-compatible :obj:`dict` representation of this key
+        instance.
+        
+        >>> import json
+        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        >>> isinstance(json.dumps(ck.dump()), str)
+        True
+        """
+        return {
+            'cluster': self['cluster'],
+            'operations': self['operations'],
+        }
 
 class PublicKey(dict):
     """
@@ -498,18 +516,21 @@ def encrypt(
                 bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
         elif len(key['cluster']['nodes']) > 1:
-            # For multi-node clusters, the ciphertext is secret-shared across the nodes
-            # using XOR.
+            # For multiple-node clusters, the ciphertext is secret-shared across the
+            # nodes using XOR (with each share symmetrically encrypted in the case of
+            # a secret key).
+            enc = (
+                (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
+                if 'material' in key else
+                (lambda s: s)
+            )
             shares = []
             aggregate = bytes(len(buffer))
             for _ in range(len(key['cluster']['nodes']) - 1):
                 mask = _random_bytes(len(buffer))
                 aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
-                shares.append(mask)
-            shares.append(bytes(
-                a ^ b ^ c
-                for (a, b, c) in zip(aggregate, buffer, key['material'])
-            ))
+                shares.append(enc(mask))
+            shares.append(enc(bytes(a ^ b for (a, b) in zip(aggregate, buffer))))
             ciphertext = list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
@@ -526,12 +547,17 @@ def encrypt(
             ciphertext = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
         else:
             # Use additive secret sharing for multiple-node clusters.
+            material = [
+                key['material'][i] if 'material' in key else 1
+                for i in range(len(key['cluster']['nodes']))
+            ]
             shares = []
             total = 0
-            for _ in range(len(key['cluster']['nodes']) - 1):
+            quantity = len(key['cluster']['nodes'])
+            for i in range(quantity - 1):
                 share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
                 shares.append(
-                    (key['material'] * share_)
+                    (material[i] * share_)
                     %
                     _SECRET_SHARED_SIGNED_INTEGER_MODULUS
                 )
@@ -539,7 +565,7 @@ def encrypt(
 
             shares.append(
                 (
-                    key['material'] *
+                    material[quantity - 1] *
                     ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
                 ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
@@ -631,18 +657,23 @@ def decrypt(
                     bcl.symmetric.decrypt(
                         key['material'],
                         bcl.cipher(_unpack(ciphertext))
-                        )
+                    )
                 )
             except Exception as exc:
                 raise error from exc
 
         # XOR-based secret sharing is used for multiple-node clusters.
         shares = [_unpack(share) for share in ciphertext]
+        if 'material' in key:
+            shares = [
+                bcl.symmetric.decrypt(key['material'], bcl.cipher(share))
+                for share in shares
+            ]
         bytes_ = bytes(len(shares[0]))
         for share_ in shares:
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
 
-        return _decode(bytes(a ^ b for (a, b) in zip(key['material'], bytes_)))
+        return _decode(bytes_)
 
     # Decrypt a value that was encrypted fo summation.
     if key['operations'].get('sum'):
@@ -653,16 +684,20 @@ def decrypt(
             )
 
         # Additive secret sharing is used for multiple-node clusters.
-        inverse = pow(
-            key['material'],
-            _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
-            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        )
+        quantity = len(key['cluster']['nodes'])
+        inverses = [
+            pow(
+                key['material'][i] if 'material' in key else 1,
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+            for i in range(quantity)
+        ]
         plaintext = 0
-        for share_ in ciphertext:
+        for (i, share_) in enumerate(ciphertext):
             plaintext = (
                 plaintext +
-                ((inverse * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                ((inverses[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
             ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:

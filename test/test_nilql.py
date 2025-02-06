@@ -4,6 +4,7 @@ Test suite containing functional unit tests of exported functions.
 from typing import Union
 from unittest import TestCase
 from importlib import import_module
+import functools
 import json
 import base64
 import hashlib
@@ -11,13 +12,16 @@ import pytest
 
 import nilql
 
-def to_hash_base64(output: Union[bytes, int]) -> str:
+def to_hash_base64(output: Union[bytes, list[int]]) -> str:
     """
-    Helper function for converting a large binary output from a test into a
+    Helper function for converting a large output from a test into a
     short hash.
     """
-    if isinstance(output, int):
-        output = output.to_bytes(8, 'little')
+    if isinstance(output, list) and all(isinstance(o, int) for o in output):
+        output = functools.reduce(
+            (lambda a, b: a + b),
+            [o.to_bytes(8, 'little') for o in output]
+        )
 
     return base64.b64encode(hashlib.sha256(output).digest()).decode('ascii')
 
@@ -144,12 +148,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
         )
 
     def test_key_from_seed_for_match_with_single_node(self):
@@ -189,12 +193,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+            'uh5uhif06rquRHY4kbrL/31JY7SV1uj6nXSqSUfvLLg='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+            'uh5uhif06rquRHY4kbrL/31JY7SV1uj6nXSqSUfvLLg='
         )
 
 class TestKeysError(TestCase):
