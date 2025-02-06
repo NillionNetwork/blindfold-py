@@ -1,10 +1,10 @@
 [project]
 name = "nilql"
-version = "0.0.0a9"
+version = "0.0.0a10"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
 readme = "README.rst"
-requires-python = ">=3.10"
+requires-python = ">=3.9"
 dependencies = [
     "bcl~=2.3",
     "pailliers~=0.1"
