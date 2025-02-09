@@ -516,72 +516,74 @@ def encrypt(
                 ' bytes or fewer'
             )
 
-    ciphertext = None
-
     # Encrypt a value for storage and retrieval.
     if key['operations'].get('store'):
+        # For single-node clusters, the data is encrypted using a symmetric key.
         if len(key['cluster']['nodes']) == 1:
-            # For single-node clusters, the data is encrypted using a symmetric key.
-            ciphertext = _pack(
+            return _pack(
                 bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
-        elif len(key['cluster']['nodes']) > 1:
-            # For multiple-node clusters, the ciphertext is secret-shared across the
-            # nodes using XOR (with each share symmetrically encrypted in the case of
-            # a secret key).
-            enc = (
-                (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
-                if 'material' in key else
-                (lambda s: s)
-            )
-            shares = []
-            aggregate = bytes(len(buffer))
-            for _ in range(len(key['cluster']['nodes']) - 1):
-                mask = _random_bytes(len(buffer))
-                aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
-                shares.append(enc(mask))
-            shares.append(enc(bytes(a ^ b for (a, b) in zip(aggregate, buffer))))
-            ciphertext = list(map(_pack, shares))
+
+        # For multiple-node clusters, the ciphertext is secret-shared using XOR
+        # (with each share symmetrically encrypted in the case of a secret key).
+        enc = (
+            (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
+            if 'material' in key else
+            (lambda s: s)
+        )
+        shares = []
+        aggregate = bytes(len(buffer))
+        for _ in range(len(key['cluster']['nodes']) - 1):
+            mask = _random_bytes(len(buffer))
+            aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
+            shares.append(enc(mask))
+        shares.append(enc(bytes(a ^ b for (a, b) in zip(aggregate, buffer))))
+        return list(map(_pack, shares))
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match'):
         ciphertext = _pack(hashlib.sha512(key['material'] + buffer).digest())
 
-        # If there are multiple nodes, prepare the same ciphertext for each.
+        # For multiple-node clusters, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
             ciphertext = [ciphertext for _ in key['cluster']['nodes']]
 
+        return ciphertext
+
     # Encrypt a numerical value for summation.
     if key['operations'].get('sum'):
+        # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
-            ciphertext = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
-        elif len(key['cluster']['nodes']) > 1:
-            # Use additive secret sharing for multiple-node clusters.
-            material = [
-                key['material'][i] if 'material' in key else 1
-                for i in range(len(key['cluster']['nodes']))
-            ]
-            shares = []
-            total = 0
-            quantity = len(key['cluster']['nodes'])
-            for i in range(quantity - 1):
-                share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
-                shares.append(
-                    (material[i] * share_)
-                    %
-                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-                )
-                total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            return hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
 
+        # For multiple-node clusters, additive secret sharing is used.
+        material = [
+            key['material'][i] if 'material' in key else 1
+            for i in range(len(key['cluster']['nodes']))
+        ]
+        shares = []
+        total = 0
+        quantity = len(key['cluster']['nodes'])
+        for i in range(quantity - 1):
+            share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
             shares.append(
-                (
-                    material[quantity - 1] *
-                    ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-                ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                (material[i] * share_)
+                %
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
-            ciphertext = shares
+            total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-    return ciphertext
+        shares.append(
+            (
+                material[quantity - 1] *
+                ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        )
+        return shares
+
+    raise ValueError(
+        'cannot encrypt the supplied plaintext using the supplied key'
+    )
 
 def decrypt(
         key: SecretKey,
@@ -628,13 +630,14 @@ def decrypt(
     ... )
     Traceback (most recent call last):
       ...
-    ValueError: cannot decrypt supplied ciphertext using the supplied key
+    ValueError: cannot decrypt the supplied ciphertext using the supplied key
     """
     error = ValueError(
-        'cannot decrypt supplied ciphertext using the supplied key'
+        'cannot decrypt the supplied ciphertext using the supplied key'
     )
 
-    # Confirm that the secret key and ciphertext have compatible clusters.
+    # Confirm that the secret key and ciphertext have compatible cluster
+    # specifications.
     if len(key['cluster']['nodes']) == 1:
         if not isinstance(ciphertext, str):
             raise TypeError(
@@ -663,8 +666,8 @@ def decrypt(
 
     # Decrypt a value that was encrypted for storage and retrieval.
     if key['operations'].get('store'):
+        # For single-node clusters, the data is encrypted using a symmetric key.
         if len(key['cluster']['nodes']) == 1:
-            # Single-node clusters use symmetric encryption.
             try:
                 return _decode(
                     bcl.symmetric.decrypt(
@@ -675,7 +678,8 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        # XOR-based secret sharing is used for multiple-node clusters.
+        # For multiple-node clusters, the ciphertext is secret-shared using XOR
+        # (with each share symmetrically encrypted in the case of a secret key).
         shares = [_unpack(share) for share in ciphertext]
         if 'material' in key:
             shares = [
@@ -690,13 +694,14 @@ def decrypt(
 
     # Decrypt a value that was encrypted for summation.
     if key['operations'].get('sum'):
+        # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
             return pailliers.decrypt(
                 key['material'],
                 pailliers.cipher(int(ciphertext, 16))
             )
 
-        # Additive secret sharing is used for multiple-node clusters.
+        # For multiple-node clusters, additive secret sharing is used.
         quantity = len(key['cluster']['nodes'])
         inverses = [
             pow(

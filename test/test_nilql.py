@@ -442,7 +442,7 @@ class TestFunctionsErrors(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='cannot decrypt supplied ciphertext using the supplied key'
+            match='cannot decrypt the supplied ciphertext using the supplied key'
         ):
             sk = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
             sk_alt = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
