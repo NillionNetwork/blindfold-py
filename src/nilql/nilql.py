@@ -101,16 +101,18 @@ def _unpack(s: str) -> bytes:
     """
     return base64.b64decode(s)
 
-def _encode(value: Union[int, str]) -> bytes:
+def _encode(value: Union[int, str, bytes]) -> bytes:
     """
-    Encode a numeric value or string as a byte array. The encoding includes
-    information about the type of the value (to enable decoding without any
-    additional context).
+    Encode an integer, string, or binary plaintext as a binary value for
+    storage. The encoding includes information about the type of the value
+    (to enable decoding without any additional context).
 
     >>> _encode(123).hex()
     '007b00008000000000'
     >>> _encode('abc').hex()
     '01616263'
+    >>> _encode(bytes([1, 2, 3])).hex()
+    '02010203'
 
     If a value cannot be encoded, an exception is raised.
 
@@ -128,30 +130,35 @@ def _encode(value: Union[int, str]) -> bytes:
     if isinstance(value, str):
         return bytes([1]) + value.encode('UTF-8')
 
+    if isinstance(value, bytes):
+        return bytes([2]) + value
+
     raise ValueError('cannot encode value')
 
-def _decode(value: bytes) -> Union[int, str]:
+def _decode(value: bytes) -> Union[int, str, bytes]:
     """
-    Decode a bytes-like object back into a numeric value or string.
+    Decode a binary value back into an integer, string, or binary plaintext.
 
     >>> _decode(_encode(123))
     123
     >>> _decode(_encode('abc'))
     'abc'
+    >>> _decode(_encode(bytes([1, 2, 3])))
+    b'\\x01\\x02\\x03'
 
     If a value cannot be decoded, an exception is raised.
 
     >>> _decode([1, 2, 3])
     Traceback (most recent call last):
       ...
-    TypeError: can only decode bytes-like object
-    >>> _decode(bytes([2]))
+    TypeError: can only decode bytes value
+    >>> _decode(bytes([3]))
     Traceback (most recent call last):
       ...
     ValueError: cannot decode value
     """
     if not isinstance(value, bytes):
-        raise TypeError('can only decode bytes-like object')
+        raise TypeError('can only decode bytes value')
 
     if value[0] == 0: # Indicates encoded value is a 32-bit signed integer.
         integer = int.from_bytes(value[1:], 'little')
@@ -159,6 +166,9 @@ def _decode(value: bytes) -> Union[int, str]:
 
     if value[0] == 1: # Indicates encoded value is a UTF-8 string.
         return value[1:].decode('UTF-8')
+
+    if value[0] == 2: # Indicates encoded value is binary data.
+        return value[1:]
 
     raise ValueError('cannot decode value')
 
@@ -473,7 +483,7 @@ class PublicKey(dict):
 
 def encrypt(
         key: Union[SecretKey, PublicKey],
-        plaintext: Union[int, str]
+        plaintext: Union[int, str, bytes]
     ) -> Union[str, Sequence[str], Sequence[int]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
@@ -496,12 +506,12 @@ def encrypt(
     elif 'sum' in key['operations']: # Non-integer cannot be encrypted for summation.
         raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
-    # Encode a string for storage or matching.
-    if isinstance(plaintext, str):
+    # Encode string or binary data for storage or matching.
+    if isinstance(plaintext, (str, bytes)):
         buffer = _encode(plaintext)
         if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
             raise ValueError(
-                'string plaintext must be possible to encode in ' +
+                'string or binary plaintext must be possible to encode in ' +
                 str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
                 ' bytes or fewer'
             )
@@ -545,7 +555,7 @@ def encrypt(
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
             ciphertext = hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
-        else:
+        elif len(key['cluster']['nodes']) > 1:
             # Use additive secret sharing for multiple-node clusters.
             material = [
                 key['material'][i] if 'material' in key else 1
@@ -576,7 +586,7 @@ def encrypt(
 def decrypt(
         key: SecretKey,
         ciphertext: Union[str, Sequence[str], Sequence[int]]
-    ) -> Union[bytes, int]:
+    ) -> Union[int, str, bytes]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
@@ -587,6 +597,9 @@ def decrypt(
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, -10))
     -10
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+    >>> decrypt(key, encrypt(key, bytes([1, 2, 3])))
+    b'\\x01\\x02\\x03'
     >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 'abc'))
     'abc'
@@ -608,7 +621,7 @@ def decrypt(
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    TypeError: secret key requires a valid ciphertext from a multi-node cluster
+    TypeError: secret key requires a valid ciphertext from a multiple-node cluster
     >>> decrypt(
     ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
     ...     'abc'
@@ -637,7 +650,7 @@ def decrypt(
             ))
         ):
             raise TypeError(
-              'secret key requires a valid ciphertext from a multi-node cluster'
+              'secret key requires a valid ciphertext from a multiple-node cluster'
             )
 
         if (
@@ -675,7 +688,7 @@ def decrypt(
 
         return _decode(bytes_)
 
-    # Decrypt a value that was encrypted fo summation.
+    # Decrypt a value that was encrypted for summation.
     if key['operations'].get('sum'):
         if len(key['cluster']['nodes']) == 1:
             return pailliers.decrypt(
@@ -711,7 +724,7 @@ def allot(
         document: Union[int, bool, str, list, dict]
     ) -> Sequence[Union[int, bool, str, list, dict]]:
     """
-    Convert a document that may contain ciphertexts intended for multi-node
+    Convert a document that may contain ciphertexts intended for multiple-node
     clusters into secret shares of that document. Shallow copies are created
     whenever possible.
 
@@ -835,7 +848,7 @@ def unify(
         ignore: Sequence[str] = None
     ) -> Union[int, bool, str, list, dict]:
     """
-    Convert an object that may contain ciphertexts intended for multi-node
+    Convert an object that may contain ciphertexts intended for multiple-node
     clusters into secret shares of that object. Shallow copies are created
     whenever possible.
 

@@ -351,7 +351,7 @@ class TestFunctionsErrors(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='string plaintext must be possible to encode in 4096 bytes or fewer'
+            match='string or binary plaintext must be possible to encode in 4096 bytes or fewer'
         ):
             cluster = {'nodes': [{}]}
             operations = {'store': True}
@@ -379,7 +379,7 @@ class TestFunctionsErrors(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='string plaintext must be possible to encode in 4096 bytes or fewer'
+            match='string or binary plaintext must be possible to encode in 4096 bytes or fewer'
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
@@ -426,7 +426,7 @@ class TestFunctionsErrors(TestCase):
 
         with pytest.raises(
             TypeError,
-            match='secret key requires a valid ciphertext from a multi-node cluster'
+            match='secret key requires a valid ciphertext from a multiple-node cluster'
         ):
             nilql.decrypt(sk_two, ciphertext_one)
 
