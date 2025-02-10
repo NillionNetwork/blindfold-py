@@ -129,12 +129,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
+            '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'TVFhJJ32+eh+yaYL1Dhcw7Z+ykY4N1cKDJXDxdS92vI='
+            '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
         )
 
     def test_key_from_seed_for_store_with_multiple_nodes(self):
@@ -144,12 +144,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+            'UEoI836rNUBdCixoavnwlPEVqAe2wrPxj+UkVpJPPo0='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'i4ZP5syVY2V6ZFboTey/S83j+7ufgrs4/kUB849/uAI='
+            'UEoI836rNUBdCixoavnwlPEVqAe2wrPxj+UkVpJPPo0='
         )
 
     def test_key_from_seed_for_match_with_single_node(self):
@@ -159,12 +159,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+            'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+            'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
 
     def test_key_from_seed_for_match_with_multiple_nodes(self):
@@ -174,12 +174,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+            'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'M4qqWosTwaBvPMEvUDWKg/RJA3+18+mv/X5Zlj21NhY='
+            'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
 
     def test_key_from_seed_for_sum_with_multiple_nodes(self):
@@ -189,12 +189,12 @@ class TestKeys(TestCase):
         sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
-            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+            'l3O25x9CYiiA+XXTNPoT4WylTOXjeWj4GmoSoOPpZHo='
         )
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
-            'voydliW+MzaYaaIs6ydwLyZdNyYclj+APB2BxNK+AKY='
+            'l3O25x9CYiiA+XXTNPoT4WylTOXjeWj4GmoSoOPpZHo='
         )
 
 class TestKeysError(TestCase):
