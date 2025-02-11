@@ -46,6 +46,9 @@ This library provides cryptographic operations that are compatible with nilDB no
 |             +------------+------------------------------------+------------------------------------+
 |             | sum        | | additive secret sharing          | 32-bit signed integer              |
 |             |            | | (prime modulus 2^32 + 15)        |                                    |
+|             +------------+------------------------------------+------------------------------------+
+|             | redundancy | | Shamir secret sharing            | 32-bit signed integer              |
+|             |            | | (prime modulus 2^32 + 15)        |                                    |
 +-------------+------------+------------------------------------+------------------------------------+
 
 Installation and Usage
