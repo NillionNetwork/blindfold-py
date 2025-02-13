@@ -24,33 +24,34 @@ _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
 
-_Hash = hashlib.sha512
+_HASH = hashlib.sha512
 """Hash function used for HKDF and matching."""
-
 
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
     Extracts a pseudorandom key (PRK) using HMAC with the given salt and input key material.
-    If the salt is empty, a zero-filled byte string of the same length as the hash function's digest size is used.
+    If the salt is empty, a zero-filled byte string of the same length as the hash function's
+    digest size is used.
     """
     if len(salt) == 0:
-        salt = bytes([0] * _Hash().digest_size)
-    return hmac.new(salt, input_key, _Hash).digest()
+        salt = bytes([0] * _HASH().digest_size)
+    return hmac.new(salt, input_key, _HASH).digest()
 
 def _hkdf_expand(pseudo_random_key: bytes, info: bytes, length: int) -> bytes:
     """
-    Expands the pseudo_random_key into an output key material (OKM) of the desired length using HMAC-based expansion.
+    Expands the pseudo_random_key into an output key material (OKM) of the desired length using
+    HMAC-based expansion.
     """
-    t = b""
-    okm = b""
+    t = b''
+    okm = b''
     i = 0
     while len(okm) < length:
         i += 1
-        t = hmac.new(pseudo_random_key, t + info + bytes([i]), _Hash).digest()
+        t = hmac.new(pseudo_random_key, t + info + bytes([i]), _HASH).digest()
         okm += t
     return okm[:length]
 
-def _hkdf(length: int, input_key: bytes, salt: bytes = b"", info: bytes = b"") -> bytes:
+def _hkdf(length: int, input_key: bytes, salt: bytes = b'', info: bytes = b'') -> bytes:
     """
     Extract a pseudorandom key of `length` from `input_key` and optionally `salt` and `info`.
     """
@@ -63,7 +64,7 @@ def _random_bytes(length: int, seed: Optional[bytes] = None, salt: Optional[byte
     the seed if one is supplied).
     """
     if seed is not None:
-        return _hkdf(length, seed, b"" if salt is None else salt)
+        return _hkdf(length, seed, b'' if salt is None else salt)
 
     return secrets.token_bytes(length)
 
@@ -93,7 +94,7 @@ def _random_int(
         integer = None
         index = 0
         while integer is None or integer > range_:
-            bytes_ = bytearray(_random_bytes(8, seed, index.to_bytes(8, 'little')))
+            bytes_ = bytearray(_random_bytes(8, seed, index.to_bytes(64, 'little')))
             index += 1
             bytes_[4] &= 1
             bytes_[5] &= 0
@@ -267,7 +268,11 @@ class SecretKey(dict):
                     _random_int(
                         1,
                         _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1,
-                        _seeds(seed, i) if seed is not None else None
+                        (
+                            _random_bytes(64, seed, i.to_bytes(64, 'little'))
+                            if seed is not None else
+                            None
+                        )
                     )
                     for i in range(len(secret_key['cluster']['nodes']))
                 ]
@@ -560,7 +565,7 @@ def encrypt(
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match'):
-        ciphertext = _pack(_Hash(key['material'] + buffer).digest())
+        ciphertext = _pack(_HASH(key['material'] + buffer).digest())
 
         # For multiple-node clusters, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
