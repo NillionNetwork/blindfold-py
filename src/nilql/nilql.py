@@ -8,6 +8,7 @@ import doctest
 import base64
 import secrets
 import hashlib
+import hmac
 import bcl
 import pailliers
 
@@ -23,26 +24,46 @@ _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
 
-def _seeds(seed: bytes, index: int) -> bytes:
-    """
-    Generate entries in an indexed sequence of seeds derived from a base seed.
-    """
-    if index < 0 or index >= 2 ** 64:
-        raise ValueError('index must be a 64-bit unsigned integer value')
+_Hash = hashlib.sha512
+"""Hash function used for HKDF and matching."""
 
-    return hashlib.sha512(seed + index.to_bytes(8, 'little')).digest()
 
-def _random_bytes(length: int, seed: Optional[bytes] = None) -> bytes:
+def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
+    """
+    Extracts a pseudorandom key (PRK) using HMAC with the given salt and input key material.
+    If the salt is empty, a zero-filled byte string of the same length as the hash function's digest size is used.
+    """
+    if len(salt) == 0:
+        salt = bytes([0] * _Hash().digest_size)
+    return hmac.new(salt, input_key, _Hash).digest()
+
+def _hkdf_expand(pseudo_random_key: bytes, info: bytes, length: int) -> bytes:
+    """
+    Expands the pseudo_random_key into an output key material (OKM) of the desired length using HMAC-based expansion.
+    """
+    t = b""
+    okm = b""
+    i = 0
+    while len(okm) < length:
+        i += 1
+        t = hmac.new(pseudo_random_key, t + info + bytes([i]), _Hash).digest()
+        okm += t
+    return okm[:length]
+
+def _hkdf(length: int, input_key: bytes, salt: bytes = b"", info: bytes = b"") -> bytes:
+    """
+    Extract a pseudorandom key of `length` from `input_key` and optionally `salt` and `info`.
+    """
+    prk = _hkdf_extract(salt, input_key)
+    return _hkdf_expand(prk, info, length)
+
+def _random_bytes(length: int, seed: Optional[bytes] = None, salt: Optional[bytes] = None) -> bytes:
     """
     Return a random :obj:`bytes` value of the specified length (using
     the seed if one is supplied).
     """
     if seed is not None:
-        bytes_ = bytes()
-        iterations = (length // 64) + (1 if length % 64 > 0 else 0)
-        for i in range(iterations):
-            bytes_ = bytes_ + _seeds(seed, i)
-        return bytes_[:length]
+        return _hkdf(length, seed, b"" if salt is None else salt)
 
     return secrets.token_bytes(length)
 
@@ -72,10 +93,7 @@ def _random_int(
         integer = None
         index = 0
         while integer is None or integer > range_:
-            bytes_ = bytearray(_random_bytes(
-              8,
-              None if seed is None else _seeds(seed, index)
-            ))
+            bytes_ = bytearray(_random_bytes(8, seed, index.to_bytes(8, 'little')))
             index += 1
             bytes_[4] &= 1
             bytes_[5] &= 0
@@ -545,7 +563,7 @@ def encrypt(
 
     # Encrypt (i.e., hash) a value for matching.
     if key['operations'].get('match'):
-        ciphertext = _pack(hashlib.sha512(key['material'] + buffer).digest())
+        ciphertext = _pack(_Hash(key['material'] + buffer).digest())
 
         # If there are multiple nodes, prepare the same ciphertext for each.
         if len(key['cluster']['nodes']) > 1:
