@@ -24,7 +24,7 @@ Library for working with encrypted data within nilDB queries and replies.
 
 Description and Purpose
 -----------------------
-This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities that nilQL makes available,
+This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities that nilQL makes available.
 
 +-------------+------------+------------------------------------+------------------------------------+
 | Cluster     | Operation  | Implementation Details             | Supported Types                    |
@@ -59,7 +59,7 @@ The library can be imported in the usual ways:
 
 Example
 ^^^^^^^^
-An example workflow that demonstrates the use of the library is presented below:
+An example workflow that demonstrates use of the library is presented below:
 
 .. code-block:: python
 

@@ -419,14 +419,14 @@ class TestFunctionsErrors(TestCase):
         ciphertext_two = nilql.encrypt(sk_two, 123)
 
         with pytest.raises(
-            TypeError,
+            ValueError,
             match='secret key requires a valid ciphertext from a single-node cluster'
         ):
             nilql.decrypt(sk_one, ciphertext_two)
 
         with pytest.raises(
-            TypeError,
-            match='secret key requires a valid ciphertext from a multiple-node cluster'
+            ValueError,
+            match='secret key and ciphertext must have the same associated cluster size'
         ):
             nilql.decrypt(sk_two, ciphertext_one)
 

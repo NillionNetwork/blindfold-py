@@ -75,7 +75,7 @@ def _random_int(
     ) -> int:
     """
     Return a random integer value within the specified range (using
-    the seed if one is supplied).
+    the seed if one is supplied) by leveraging rejection sampling.
     """
     if minimum < 0 or minimum > 1:
         raise ValueError('minimum must be 0 or 1')
@@ -122,9 +122,9 @@ def _unpack(s: str) -> bytes:
 
 def _encode(value: Union[int, str, bytes]) -> bytes:
     """
-    Encode an integer, string, or binary plaintext as a binary value for
-    storage. The encoding includes information about the type of the value
-    (to enable decoding without any additional context).
+    Encode an integer, string, or binary plaintext as a binary value.
+    The encoding includes information about the type of the value in
+    the first byte (to enable decoding without any additional context).
 
     >>> _encode(123).hex()
     '007b00008000000000'
@@ -170,14 +170,14 @@ def _decode(value: bytes) -> Union[int, str, bytes]:
     >>> _decode([1, 2, 3])
     Traceback (most recent call last):
       ...
-    TypeError: can only decode bytes value
+    TypeError: can only decode from a bytes value
     >>> _decode(bytes([3]))
     Traceback (most recent call last):
       ...
     ValueError: cannot decode value
     """
     if not isinstance(value, bytes):
-        raise TypeError('can only decode bytes value')
+        raise TypeError('can only decode from a bytes value')
 
     if value[0] == 0: # Indicates encoded value is a 32-bit signed integer.
         integer = int.from_bytes(value[1:], 'little')
@@ -193,7 +193,7 @@ def _decode(value: bytes) -> Union[int, str, bytes]:
 
 class SecretKey(dict):
     """
-    Data structure for all categories of secret key instances.
+    Data structure for representing all categories of secret key instances.
     """
     @staticmethod
     def generate(
@@ -203,7 +203,7 @@ class SecretKey(dict):
     ) -> SecretKey:
         """
         Return a secret key built according to what is specified in the supplied
-        cluster configuration and operation list.
+        cluster configuration and operation specification.
 
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(sk, SecretKey)
@@ -255,7 +255,7 @@ class SecretKey(dict):
 
         if secret_key['operations'].get('sum'):
             if len(secret_key['cluster']['nodes']) == 1:
-                # Paillier secret key for encrypting a plaintext numeric value.
+                # Paillier secret key for encrypting a plaintext integer value.
                 if seed is not None:
                     raise RuntimeError(
                         'seed-based derivation of summation-compatible keys ' +
@@ -263,7 +263,7 @@ class SecretKey(dict):
                     )
                 secret_key['material'] = pailliers.secret(2048)
             else:
-                # Multiplicative masks to be used on the shares for each node.
+                # Distinct multiplicative mask for each additive share.
                 secret_key['material'] = [
                     _random_int(
                         1,
@@ -281,7 +281,7 @@ class SecretKey(dict):
 
     def dump(self: SecretKey) -> dict:
         """
-        Return a JSON-compatible :obj:`dict` representation of this key
+        Return a JSON-compatible dictionary representation of this key
         instance.
         
         >>> import json
@@ -315,7 +315,7 @@ class SecretKey(dict):
     @staticmethod
     def load(dictionary: dict) -> SecretKey:
         """
-        Create an instance from its JSON-compatible dictionary
+        Return an instance built from a JSON-compatible dictionary
         representation.
 
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
@@ -357,7 +357,7 @@ class SecretKey(dict):
 
 class ClusterKey(SecretKey):
     """
-    Data structure for all categories of cluster key instances.
+    Data structure for representing all categories of cluster key instances.
     """
     @staticmethod
     def generate( # pylint: disable=arguments-differ # Seeds not supported.
@@ -366,7 +366,7 @@ class ClusterKey(SecretKey):
     ) -> ClusterKey:
         """
         Return a cluster key built according to what is specified in the supplied
-        cluster configuration and operation list.
+        cluster configuration and operation specification.
 
         >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         >>> isinstance(ck, ClusterKey)
@@ -393,24 +393,9 @@ class ClusterKey(SecretKey):
 
         return cluster_key
 
-    @staticmethod
-    def load(dictionary: dict) -> ClusterKey:
-        """
-        Create an instance from its JSON-compatible dictionary
-        representation.
-
-        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
-        >>> ck == ClusterKey.load(ck.dump())
-        True
-        """
-        return ClusterKey({
-            'cluster': dictionary['cluster'],
-            'operations': dictionary['operations'],
-        })
-
     def dump(self: ClusterKey) -> dict:
         """
-        Return a JSON-compatible :obj:`dict` representation of this key
+        Return a JSON-compatible dictionary representation of this key
         instance.
         
         >>> import json
@@ -423,9 +408,24 @@ class ClusterKey(SecretKey):
             'operations': self['operations'],
         }
 
+    @staticmethod
+    def load(dictionary: dict) -> ClusterKey:
+        """
+        Return an instance built from a JSON-compatible dictionary
+        representation.
+
+        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        >>> ck == ClusterKey.load(ck.dump())
+        True
+        """
+        return ClusterKey({
+            'cluster': dictionary['cluster'],
+            'operations': dictionary['operations'],
+        })
+
 class PublicKey(dict):
     """
-    Data structure for all categories of public key instances.
+    Data structure for representing all categories of public key instances.
     """
     @staticmethod
     def generate(secret_key: SecretKey) -> PublicKey:
@@ -454,7 +454,7 @@ class PublicKey(dict):
 
     def dump(self: PublicKey) -> dict:
         """
-        Return a JSON-compatible :obj:`dict` representation of this key
+        Return a JSON-compatible dictionary representation of this key
         instance.
 
         >>> import json
@@ -480,7 +480,7 @@ class PublicKey(dict):
     @staticmethod
     def load(dictionary: PublicKey) -> dict:
         """
-        Create an instance from its JSON-compatible dictionary
+        Return an instance built from a JSON-compatible dictionary
         representation.
 
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
@@ -539,7 +539,7 @@ def encrypt(
                 ' bytes or fewer'
             )
 
-    # Encrypt a value for storage and retrieval.
+    # Encrypt a plaintext for storage and retrieval.
     if key['operations'].get('store'):
         # For single-node clusters, the data is encrypted using a symmetric key.
         if len(key['cluster']['nodes']) == 1:
@@ -549,7 +549,7 @@ def encrypt(
 
         # For multiple-node clusters, the ciphertext is secret-shared using XOR
         # (with each share symmetrically encrypted in the case of a secret key).
-        enc = (
+        optional_enc = (
             (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
             if 'material' in key else
             (lambda s: s)
@@ -559,28 +559,37 @@ def encrypt(
         for _ in range(len(key['cluster']['nodes']) - 1):
             mask = _random_bytes(len(buffer))
             aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
-            shares.append(enc(mask))
-        shares.append(enc(bytes(a ^ b for (a, b) in zip(aggregate, buffer))))
+            shares.append(optional_enc(mask))
+        shares.append(optional_enc(
+            bytes(a ^ b for (a, b) in zip(aggregate, buffer))
+        ))
         return list(map(_pack, shares))
 
-    # Encrypt (i.e., hash) a value for matching.
+    # Encrypt (i.e., hash) a plaintext for matching.
     if key['operations'].get('match'):
+        # The deterministic salted hash of the encoded plaintext is the ciphertext.
         ciphertext = _pack(_HASH(key['material'] + buffer).digest())
 
-        # For multiple-node clusters, prepare the same ciphertext for each.
+        # For multiple-node clusters, replicate the ciphertext for each node.
         if len(key['cluster']['nodes']) > 1:
             ciphertext = [ciphertext for _ in key['cluster']['nodes']]
 
         return ciphertext
 
-    # Encrypt a numerical value for summation.
+    # Encrypt an integer plaintext in a summation-compatible way.
     if key['operations'].get('sum'):
+        # Only 32-bit signed integer plaintexts are supported.
+        if not isinstance(plaintext, int):
+            raise TypeError(
+                'plaintext to encrypt for sum operation must be integer'
+            )
+
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
             return hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
 
         # For multiple-node clusters, additive secret sharing is used.
-        material = [
+        masks = [
             key['material'][i] if 'material' in key else 1
             for i in range(len(key['cluster']['nodes']))
         ]
@@ -590,7 +599,7 @@ def encrypt(
         for i in range(quantity - 1):
             share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
             shares.append(
-                (material[i] * share_)
+                (masks[i] * share_)
                 %
                 _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
@@ -598,12 +607,14 @@ def encrypt(
 
         shares.append(
             (
-                material[quantity - 1] *
+                masks[quantity - 1] *
                 ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
             ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
         )
         return shares
 
+    # The below should not occur unless the key's cluster or operations
+    # information is malformed/missing or the plaintext is unsupported.
     raise ValueError(
         'cannot encrypt the supplied plaintext using the supplied key'
     )
@@ -613,8 +624,8 @@ def decrypt(
         ciphertext: Union[str, Sequence[str], Sequence[int]]
     ) -> Union[int, str, bytes]:
     """
-    Return the ciphertext obtained by using the supplied key to encrypt the
-    supplied plaintext.
+    Return the plaintext obtained by using the supplied key to decrypt the
+    supplied ciphertext.
 
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
@@ -646,7 +657,7 @@ def decrypt(
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    TypeError: secret key requires a valid ciphertext from a multiple-node cluster
+    ValueError: secret key and ciphertext must have the same associated cluster size
     >>> decrypt(
     ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
     ...     'abc'
@@ -663,33 +674,29 @@ def decrypt(
     # specifications.
     if len(key['cluster']['nodes']) == 1:
         if not isinstance(ciphertext, str):
-            raise TypeError(
+            raise ValueError(
               'secret key requires a valid ciphertext from a single-node cluster'
             )
     else:
         if (
-            isinstance(ciphertext, str) or
             (not isinstance(ciphertext, Sequence)) or
             (not (
                 all(isinstance(c, int) for c in ciphertext) or
                 all(isinstance(c, str) for c in ciphertext)
             ))
         ):
-            raise TypeError(
+            raise ValueError(
               'secret key requires a valid ciphertext from a multiple-node cluster'
             )
 
-        if (
-            isinstance(ciphertext, Sequence) and
-            len(key['cluster']['nodes']) != len(ciphertext)
-        ):
+        if len(key['cluster']['nodes']) != len(ciphertext):
             raise ValueError(
               'secret key and ciphertext must have the same associated cluster size'
             )
 
     # Decrypt a value that was encrypted for storage and retrieval.
     if key['operations'].get('store'):
-        # For single-node clusters, the data is encrypted using a symmetric key.
+        # For single-node clusters, the plaintext is encrypted using a symmetric key.
         if len(key['cluster']['nodes']) == 1:
             try:
                 return _decode(
@@ -705,17 +712,21 @@ def decrypt(
         # (with each share symmetrically encrypted in the case of a secret key).
         shares = [_unpack(share) for share in ciphertext]
         if 'material' in key:
-            shares = [
-                bcl.symmetric.decrypt(key['material'], bcl.cipher(share))
-                for share in shares
-            ]
+            try:
+                shares = [
+                    bcl.symmetric.decrypt(key['material'], bcl.cipher(share))
+                    for share in shares
+                ]
+            except Exception as exc:
+                raise error from exc
+
         bytes_ = bytes(len(shares[0]))
         for share_ in shares:
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
 
         return _decode(bytes_)
 
-    # Decrypt a value that was encrypted for summation.
+    # Decrypt a value that was encrypted in a summation-compatible way.
     if key['operations'].get('sum'):
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
@@ -725,22 +736,24 @@ def decrypt(
             )
 
         # For multiple-node clusters, additive secret sharing is used.
-        quantity = len(key['cluster']['nodes'])
-        inverses = [
+        inverse_masks = [
             pow(
                 key['material'][i] if 'material' in key else 1,
                 _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
                 _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
-            for i in range(quantity)
+            for i in range(len(key['cluster']['nodes']))
         ]
+        shares = ciphertext
         plaintext = 0
-        for (i, share_) in enumerate(ciphertext):
+        for (i, share_) in enumerate(shares):
             plaintext = (
                 plaintext +
-                ((inverses[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
             ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
+        # Field elements in the "upper half" of the field represent negative
+        # integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
             plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
