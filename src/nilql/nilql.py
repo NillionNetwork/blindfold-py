@@ -283,7 +283,7 @@ class SecretKey(dict):
         """
         Return a JSON-compatible dictionary representation of this key
         instance.
-        
+
         >>> import json
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
         >>> isinstance(json.dumps(sk.dump()), str)
@@ -526,7 +526,8 @@ def encrypt(
         ):
             raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
         buffer = _encode(plaintext)
-    elif 'sum' in key['operations']: # Non-integer cannot be encrypted for summation.
+    elif 'sum' in key['operations']:
+        # Non-integer cannot be encrypted for summation.
         raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
     # Encode string or binary data for storage or matching.

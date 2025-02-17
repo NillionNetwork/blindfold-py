@@ -64,12 +64,12 @@ class TestKeys(TestCase):
             sk = nilql.SecretKey.generate(cluster, {'store': True})
             sk_loaded = nilql.SecretKey.load(sk.dump())
             self.assertTrue(isinstance(sk, nilql.SecretKey))
-            self.assertTrue(sk == sk_loaded)
+            self.assertEqual(sk_loaded, sk)
 
             sk_from_json = nilql.SecretKey.load(
                 json.loads(json.dumps(sk.dump()))
             )
-            self.assertTrue(sk == sk_from_json)
+            self.assertEqual(sk_from_json, sk)
 
     def test_key_operations_for_match(self):
         """
@@ -79,12 +79,12 @@ class TestKeys(TestCase):
             sk = nilql.SecretKey.generate(cluster, {'match': True})
             sk_loaded = nilql.SecretKey.load(sk.dump())
             self.assertTrue(isinstance(sk, nilql.SecretKey))
-            self.assertTrue(sk == sk_loaded)
+            self.assertEqual(sk_loaded, sk)
 
             sk_from_json = nilql.SecretKey.load(
                 json.loads(json.dumps(sk.dump()))
             )
-            self.assertTrue(sk == sk_from_json)
+            self.assertEqual(sk_from_json, sk)
 
     def test_key_operations_for_sum_with_single_node(self):
         """
@@ -94,37 +94,37 @@ class TestKeys(TestCase):
         sk = nilql.SecretKey.generate({'nodes': [{}]}, {'sum': True})
         sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
-        self.assertTrue(sk == sk_loaded)
+        self.assertEqual(sk_loaded, sk)
 
         sk_from_json = nilql.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
-        self.assertTrue(sk == sk_from_json)
+        self.assertEqual(sk_from_json, sk)
 
         pk = nilql.PublicKey.generate(sk)
         pk_loaded = nilql.PublicKey.load(pk.dump())
         self.assertTrue(isinstance(pk, nilql.PublicKey))
-        self.assertTrue(pk == pk_loaded)
+        self.assertEqual(pk_loaded, pk)
 
         pk_from_json = nilql.PublicKey.load(
             json.loads(json.dumps(pk.dump()))
         )
-        self.assertTrue(pk == pk_from_json)
+        self.assertEqual(pk_from_json, pk)
 
     def test_key_operations_for_sum_with_multiple_nodes(self):
         """
-        Test key generate, dump, JSONify, and load for store operation
+        Test key generate, dump, JSONify, and load for sum operation
         with multiple nodes.
         """
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
-        self.assertTrue(sk == sk_loaded)
+        self.assertEqual(sk_loaded, sk)
 
         sk_from_json = nilql.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
-        self.assertTrue(sk == sk_from_json)
+        self.assertEqual(sk_from_json, sk)
 
     def test_key_from_seed_for_store_with_single_node(self):
         """
@@ -257,11 +257,11 @@ class TestFunctions(TestCase):
 
             plaintext = 123
             decrypted = nilql.decrypt(sk, nilql.encrypt(sk, plaintext))
-            self.assertTrue(plaintext == decrypted)
+            self.assertEqual(decrypted, plaintext)
 
             plaintext = 'abc'
             decrypted = nilql.decrypt(sk, nilql.encrypt(sk, plaintext))
-            self.assertTrue(plaintext == decrypted)
+            self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_for_match(self):
         """
@@ -274,9 +274,9 @@ class TestFunctions(TestCase):
             ciphertext_three = nilql.encrypt(sk, 'abc')
             ciphertext_four = nilql.encrypt(sk, 'abc')
             ciphertext_five = nilql.encrypt(sk, 'ABC')
-            self.assertTrue(ciphertext_one == ciphertext_two)
-            self.assertTrue(ciphertext_three == ciphertext_four)
-            self.assertTrue(ciphertext_four != ciphertext_five)
+            self.assertEqual(ciphertext_one, ciphertext_two)
+            self.assertEqual(ciphertext_three, ciphertext_four)
+            self.assertNotEqual(ciphertext_four, ciphertext_five)
 
     def test_encrypt_decrypt_of_int_for_sum_single(self):
         """
@@ -287,7 +287,7 @@ class TestFunctions(TestCase):
         plaintext = 123
         ciphertext = nilql.encrypt(pk, plaintext)
         decrypted = nilql.decrypt(sk, ciphertext)
-        self.assertTrue(plaintext == decrypted)
+        self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_multiple(self):
         """
@@ -297,7 +297,7 @@ class TestFunctions(TestCase):
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
         decrypted = nilql.decrypt(sk, ciphertext)
-        self.assertTrue(plaintext == decrypted)
+        self.assertEqual(decrypted, plaintext)
 
 class TestCiphertextRepresentations(TestCase):
     """
@@ -313,7 +313,7 @@ class TestCiphertextRepresentations(TestCase):
         plaintext = 'abc'
         ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
         decrypted = nilql.decrypt(ck, ciphertext)
-        self.assertTrue(plaintext == decrypted)
+        self.assertEqual(decrypted, plaintext)
 
     def test_ciphertext_representation_for_sum_with_multiple_nodes(self):
         """
@@ -325,7 +325,7 @@ class TestCiphertextRepresentations(TestCase):
         plaintext = 123
         ciphertext = [456, 246, 4294967296 + 15 - 123 - 456]
         decrypted = nilql.decrypt(ck, ciphertext)
-        self.assertTrue(plaintext == decrypted)
+        self.assertEqual(decrypted, plaintext)
 
 class TestFunctionsErrors(TestCase):
     """
@@ -468,4 +468,4 @@ class TestSecureComputations(TestCase):
             (c0 + c1 + c2) % (2 ** 32 + 15)
         )
         decrypted = nilql.decrypt(sk, [a3, b3, c3])
-        self.assertTrue(decrypted == 123 + 456 + 789)
+        self.assertEqual(decrypted, 123 + 456 + 789)
