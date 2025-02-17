@@ -14,6 +14,8 @@ import nilql
 
 from src.nilql.nilql import add_shamir_shares
 
+_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
+
 def to_hash_base64(output: Union[bytes, list[int]]) -> str:
     """
     Helper function for converting a large output from a test into a
@@ -136,12 +138,12 @@ class TestKeys(TestCase):
         sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
         sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
-        self.assertTrue(sk == sk_loaded)
+        self.assertEqual(sk_loaded, sk)
 
         sk_from_json = nilql.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
-        self.assertTrue(sk == sk_from_json)
+        self.assertEqual(sk_from_json, sk)
 
     def test_key_from_seed_for_store_with_single_node(self):
         """
@@ -387,7 +389,7 @@ class TestCiphertextRepresentations(TestCase):
         operations = {'redundancy': True}
         ck = nilql.ClusterKey.generate(cluster, operations)
         plaintext = 123
-        ciphertext = [(1, 1382717699), (2, 2765435275), (3, 4148152851)]
+        ciphertext = [[1, 1382717699], [2, 2765435275], [3, 4148152851]]
         decrypted = nilql.decrypt(ck, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
