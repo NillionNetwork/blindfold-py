@@ -12,9 +12,18 @@ import pytest
 
 import nilql
 
-from src.nilql.nilql import add_shamir_shares
-
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
+
+
+def _shamirs_add(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
+    """
+    Adds two sets of shares pointwise, assuming they use the same x-values.
+    """
+    return [
+        [x1, (y1 + y2) % prime]
+        for (x1, y1), (x2, y2) in zip(shares1, shares2)
+        if x1 == x2
+    ]
 
 def to_hash_base64(output: Union[bytes, list[int]]) -> str:
     """
@@ -544,8 +553,8 @@ class TestSecureComputations(TestCase):
         (a0, b0, c0) = nilql.encrypt(sk, 123)
         (a1, b1, c1) = nilql.encrypt(sk, 456)
         (a2, b2, c2) = nilql.encrypt(sk, 789)
-        (a3, b3, c3) = add_shamir_shares(
-            add_shamir_shares([a0, b0, c0], [a1, b1, c1]),
+        (a3, b3, c3) = _shamirs_add(
+            _shamirs_add([a0, b0, c0], [a1, b1, c1]),
             [a2, b2, c2]
         )
         decrypted = nilql.decrypt(sk, [a3, b3, c3])
