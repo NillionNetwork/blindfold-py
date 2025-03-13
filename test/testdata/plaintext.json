@@ -1,0 +1,8 @@
+{
+  "_id": "85ce66f5-9049-47cc-a81b-403cd6b49227",
+  "patient_name": "Barbara Miller",
+  "doctor_name": "Doctor McCoy",
+  "institution_name": "qwen2p5-72b-instruct",
+  "medical_diagnosis": "1. Diabetes Mellitus\n2. Pancreatitis\n3. Splenomegaly",
+  "reasoning_summary": "1. **Diabetes Mellitus:** High sugar in urine (glucosuria) and frequent urination (polyuria) are classic symptoms of diabetes. The chronic fatigue and unexplained weight loss can also be associated with uncontrolled diabetes.\n2. **Pancreatitis:** Elevated serum amylase levels suggest pancreatic inflammation (pancreatitis). This can also cause abdominal pain, particularly in the epigastric region. The presence of bright red blood in the right renal pelvis could indicate a complication or secondary issue related to the pancreas or adjacent organs.\n3. **Splenomegaly:** The radiology report indicates diffuse splenomegaly. This could be a result of chronic inflammation or another underlying condition such as liver disease, hemolytic anemia, or malignancy. The low ferritin levels might suggest anemia or chronic inflammation."
+}
