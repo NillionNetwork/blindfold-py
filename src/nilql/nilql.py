@@ -83,6 +83,15 @@ def _random_int(
     """
     Return a random integer value within the specified range (using
     the seed if one is supplied) by leveraging rejection sampling.
+    
+    >>> _random_int(-1, 1)
+    Traceback (most recent call last):
+      ...
+    ValueError: minimum must be 0 or 1
+    >>> _random_int(1, -1)
+    Traceback (most recent call last):
+      ...
+    ValueError: maximum must be greater than the minimum and less than the modulus
     """
     if minimum < 0 or minimum > 1:
         raise ValueError('minimum must be 0 or 1')
@@ -134,9 +143,16 @@ def _shamirs_shares(
 ):
     """
     Generates a random Shamir pool for a given secret and returns share points.
+
+    >>> _shamirs_shares(123, 2, 3)
+    Traceback (most recent call last):
+      ...
+    ValueError: total number of shares cannot be less than the minimum number of shares
     """
     if minimum_shares > total_shares:
-        raise ValueError("Pool secret would be irrecoverable.")
+        raise ValueError(
+            'total number of shares cannot be less than the minimum number of shares'
+        )
 
     poly = [secret] + [secrets.randbelow(prime - 1) for _ in range(minimum_shares - 1)]
     points = [[i, _shamirs_eval(poly, i, prime)] for i in range(1, total_shares + 1)]
@@ -144,26 +160,45 @@ def _shamirs_shares(
 
 def _shamirs_recover(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
-    Recover the secret from share points.
+    Recover the secret value from the supplied share instances.
+
+    >>> _shamirs_recover([123])
+    Traceback (most recent call last):
+      ...
+    ValueError: at least 2 shares are required
     """
     if len(shares) < _SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION:
         raise ValueError(
-            f'need at least {_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares'
+            f'at least {_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares are required'
         )
 
     return lagrange(shares, prime)
 
-def _shamirs_add(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
+def _shamirs_add(shares_a, shares_b, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
-    Adds two sets of shares pointwise, assuming they use the same x-values.
+    Adds two sets of shares pointwise, assuming they use the same indices.
+
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (1, 456)])
+    [[0, 246], [1, 912]]
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123)])
+    Traceback (most recent call last):
+      ...
+    ValueError: shares sets must have the same length
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (2, 456)])
+    Traceback (most recent call last):
+      ...
+    ValueError: shares must have the same indices
     """
-    if len(shares1) != len(shares2):
+    if len(shares_a) != len(shares_b):
         raise ValueError('shares sets must have the same length')
 
+    if [i for (i, _) in shares_a] != [i for (i, _) in shares_b]:
+        raise ValueError('shares must have the same indices')
+
     return [
-        [x1, (y1 + y2) % prime]
-        for (x1, y1), (x2, y2) in zip(shares1, shares2)
-        if x1 == x2
+        [i, (v + w) % prime]
+        for (i, v), (j, w) in zip(shares_a, shares_b)
+        if i == j
     ]
 
 def _pack(b: bytes) -> str:
@@ -269,11 +304,42 @@ class SecretKey(dict):
     ) -> SecretKey:
         """
         Return a secret key built according to what is specified in the supplied
-        cluster configuration and operation specification.
+        cluster configuration, operation specification, and other parameters.
 
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(sk, SecretKey)
         True
+
+        Supplying an invalid combination of configurations and/or parameters raises
+        a corresponding exception.
+
+        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold='abc')
+        Traceback (most recent call last):
+          ...
+        TypeError: threshold must be an integer
+        >>> SecretKey.generate({'nodes': [{}, {}]}, {'match': True}, threshold=1)
+        Traceback (most recent call last):
+          ...
+        ValueError: thresholds are only supported for the sum operation
+        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=1)
+        Traceback (most recent call last):
+          ...
+        ValueError: thresholds are only supported for multiple-node clusters
+        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=-1)
+        Traceback (most recent call last):
+          ...
+        ValueError: threshold must a positive integer not larger than the cluster size
+        >>> SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=3)
+        Traceback (most recent call last):
+          ...
+        ValueError: threshold must a positive integer not larger than the cluster size
+        
+        
+        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, seed=bytes([123]))
+        Traceback (most recent call last):
+          ...
+        ValueError: seed-based derivation of summation-compatible keys is not supported \
+for single-node clusters
         """
         # Normalize type of seed argument.
         if isinstance(seed, str):
@@ -315,15 +381,15 @@ class SecretKey(dict):
             if not isinstance(threshold, int):
                 raise TypeError('threshold must be an integer')
             if threshold < 1 or threshold > cluster_size:
-                raise TypeError(
+                raise ValueError(
                     'threshold must a positive integer not larger than the cluster size'
                 )
             if cluster_size == 1:
-                raise RuntimeError(
+                raise ValueError(
                     'thresholds are only supported for multiple-node clusters'
                 )
             if not secret_key['operations'].get('sum'):
-                raise RuntimeError(
+                raise ValueError(
                     'thresholds are only supported for the sum operation'
                 )
 
@@ -343,7 +409,7 @@ class SecretKey(dict):
             if len(secret_key['cluster']['nodes']) == 1:
                 # Paillier secret key for encrypting a plaintext integer value.
                 if seed is not None:
-                    raise RuntimeError(
+                    raise ValueError(
                         'seed-based derivation of summation-compatible keys ' +
                         'is not supported for single-node clusters'
                     )
@@ -488,9 +554,10 @@ class ClusterKey(SecretKey):
         """
         Return a JSON-compatible dictionary representation of this key
         instance.
-        
+
         >>> import json
-        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        >>> cluster = {'nodes': [{}, {}, {}]}
+        >>> ck = ClusterKey.generate(cluster, {'sum': True}, threshold=2)
         >>> isinstance(json.dumps(ck.dump()), str)
         True
         """
@@ -509,7 +576,8 @@ class ClusterKey(SecretKey):
         Return an instance built from a JSON-compatible dictionary
         representation.
 
-        >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        >>> cluster = {'nodes': [{}, {}, {}]}
+        >>> ck = ClusterKey.generate(cluster, {'sum': True}, threshold=2)
         >>> ck == ClusterKey.load(ck.dump())
         True
         """
@@ -614,20 +682,26 @@ def encrypt(
     >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> isinstance(encrypt(key, 123), str)
     True
+
+    Invocations that involve invalid argument values or types may raise an
+    exception.
+
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+    >>> encrypt(key, [])
+    Traceback (most recent call last):
+      ...
+    TypeError: plaintext to encrypt for sum operation must be an integer
+    >>> encrypt(key, 2 ** 64)
+    Traceback (most recent call last):
+      ...
+    ValueError: numeric plaintext must be a valid 32-bit signed integer
+    >>> del key['operations']['sum']
+    >>> encrypt(key, 123)
+    Traceback (most recent call last):
+      ...
+    ValueError: cannot encrypt the supplied plaintext using the supplied key
     """
     buffer = None
-
-    # Encode an integer for storage or matching.
-    if isinstance(plaintext, int):
-        if (
-            plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
-            plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX
-        ):
-            raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
-        buffer = _encode(plaintext)
-    elif 'sum' in key['operations']:
-        # Non-integer cannot be encrypted for summation.
-        raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
     # Encode string or binary data for storage or matching.
     if isinstance(plaintext, (str, bytes)):
@@ -638,6 +712,18 @@ def encrypt(
                 str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
                 ' bytes or fewer'
             )
+
+    # Encode integer data for storage or matching.
+    if isinstance(plaintext, int):
+        # Only 32-bit signed integer plaintexts are supported.
+        if (
+            plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
+            plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX
+        ):
+            raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
+
+        # Encode an integer for storage or matching.
+        buffer = _encode(plaintext)
 
     # Encrypt a plaintext for storage and retrieval.
     if key['operations'].get('store'):
@@ -678,11 +764,9 @@ def encrypt(
 
     # Encrypt an integer plaintext in a summation-compatible way.
     if key['operations'].get('sum'):
-        # Only 32-bit signed integer plaintexts are supported.
+        # Non-integer cannot be encrypted for summation.
         if not isinstance(plaintext, int):
-            raise TypeError(
-                'plaintext to encrypt for sum operation must be integer'
-            )
+            raise TypeError('plaintext to encrypt for sum operation must be an integer')
 
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
@@ -728,9 +812,7 @@ def encrypt(
 
     # The below should not occur unless the key's cluster or operations
     # information is malformed/missing or the plaintext is unsupported.
-    raise ValueError(
-        'cannot encrypt the supplied plaintext using the supplied key'
-    )
+    raise ValueError('cannot encrypt the supplied plaintext using the supplied key')
 
 def decrypt(
         key: SecretKey,
@@ -781,6 +863,11 @@ def decrypt(
     ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
     ...     'abc'
     ... )
+    Traceback (most recent call last):
+      ...
+    ValueError: cannot decrypt the supplied ciphertext using the supplied key
+    >>> key_alt = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+    >>> decrypt(key_alt, encrypt(key, 123))
     Traceback (most recent call last):
       ...
     ValueError: cannot decrypt the supplied ciphertext using the supplied key
@@ -963,6 +1050,14 @@ def allot(
     Traceback (most recent call last):
       ...
     ValueError: number of shares in subdocument is not consistent
+    >>> allot([
+    ...     0,
+    ...     {'%allot': [1, 2, 3]},
+    ...     {'loc': {'%allot': [4, 5]}}
+    ... ])
+    Traceback (most recent call last):
+      ...
+    ValueError: number of shares in subdocument is not consistent
     """
     # Values and ``None`` are base cases; return a single share.
     if isinstance(document, (bool, int, float, str)) or document is None:
@@ -978,7 +1073,9 @@ def allot(
                 if multiplicity == 1:
                     multiplicity = len(result)
                 elif multiplicity != len(result):
-                    raise ValueError('number of shares is not consistent')
+                    raise ValueError(
+                        'number of shares in subdocument is not consistent'
+                    )
 
         # Create and return the appropriate number of shares.
         shares = []
@@ -1105,6 +1202,18 @@ def unify(
     >>> decrypted = unify(sk, shares)
     >>> data == decrypted
     True
+
+    Unification returns the sole document when a one-document list is supplied.
+
+    >>> 123 == unify(sk, [123])
+    True
+
+    Any attempt to supply incompatible document shares raises an exception.
+
+    >>> unify(sk, [123, 'abc'])
+    Traceback (most recent call last):
+      ...
+    TypeError: array of compatible document shares expected
     """
     if ignore is None:
         ignore = ['_created', '_updated']

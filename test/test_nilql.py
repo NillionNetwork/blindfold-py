@@ -473,8 +473,8 @@ class TestFunctionsErrors(TestCase):
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
             with pytest.raises(
-                ValueError,
-                match='numeric plaintext must be a valid 32-bit signed integer'
+                TypeError,
+                match='plaintext to encrypt for sum operation must be an integer'
             ):
                 sk = nilql.SecretKey.generate(cluster, {'sum': True})
                 ek = nilql.PublicKey.generate(sk) if len(cluster['nodes']) == 1 else sk
