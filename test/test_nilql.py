@@ -141,12 +141,12 @@ class TestKeys(TestCase):
         )
         self.assertEqual(sk_from_json, sk)
 
-    def test_key_operations_for_redundancy_with_multiple_nodes(self):
+    def test_key_operations_for_sum_with_multiple_nodes_and_threshold(self):
         """
-        Test key generate, dump, JSONify, and load for redundancy operation
-        with multiple nodes.
+        Test key generate, dump, JSONify, and load for sum operation
+        with multiple nodes and threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         sk_loaded = nilql.SecretKey.load(sk.dump())
         self.assertTrue(isinstance(sk, nilql.SecretKey))
         self.assertEqual(sk_loaded, sk)
@@ -160,7 +160,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for store operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
@@ -175,7 +175,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for store operation with multiple nodes.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
@@ -190,7 +190,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for match operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
@@ -205,7 +205,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for match operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
@@ -220,7 +220,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for sum operation with multiple nodes.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
@@ -231,16 +231,17 @@ class TestKeys(TestCase):
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
         )
 
-    def test_key_from_seed_for_redundancy_with_multiple_nodes(self):
+    def test_key_from_seed_for_sum_with_multiple_nodes_and_threshold(self):
         """
-        Test key generation from seed for redundancy operation with multiple nodes.
+        Test key generation from seed for sum operation with multiple nodes
+        and a threshold.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True}, SEED)
+        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
@@ -344,21 +345,23 @@ class TestFunctions(TestCase):
         decrypted = nilql.decrypt(sk, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
-    def test_encrypt_decrypt_of_int_for_redundancy_multiple(self):
+    def test_encrypt_decrypt_of_int_for_sum_multiple_with_threshold(self):
         """
-        Test encryption and decryption for redundancy operation with multiple nodes.
+        Test encryption and decryption for sum operation with multiple nodes
+        and a threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
         decrypted = nilql.decrypt(sk, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
-    def test_encrypt_decrypt_of_int_for_redundancy_with_one_failure_multiple(self):
+    def test_encrypt_decrypt_of_int_for_sum_with_one_failure_multiple_with_threshold(self):
         """
-        Test encryption and decryption for redundancy operation with multiple nodes.
+        Test encryption and decryption for sum operation with multiple nodes
+        and a threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         plaintext = 123
         ciphertext = nilql.encrypt(sk, plaintext)
         decrypted = nilql.decrypt(sk, ciphertext[1:])
@@ -392,13 +395,13 @@ class TestCiphertextRepresentations(TestCase):
         decrypted = nilql.decrypt(ck, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
-    def test_ciphertext_representation_for_redundancy_with_multiple_nodes(self):
+    def test_ciphertext_representation_for_sum_with_multiple_nodes_and_threshold(self):
         """
         Test that ciphertext representation when storing in a multiple-node cluster.
         """
         cluster = {'nodes': [{}, {}, {}]}
-        operations = {'redundancy': True}
-        ck = nilql.ClusterKey.generate(cluster, operations)
+        operations = {'sum': True}
+        ck = nilql.ClusterKey.generate(cluster, operations, threshold=2)
         plaintext = 123
         ciphertext = [[1, 1382717699], [2, 2765435275], [3, 4148152851]]
         decrypted = nilql.decrypt(ck, ciphertext)
@@ -503,13 +506,13 @@ class TestFunctionsErrors(TestCase):
 
         with pytest.raises(
             ValueError,
-            match='secret key and ciphertext must have the same associated cluster size'
+            match='secret key requires a valid ciphertext from a multiple-node cluster'
         ):
             nilql.decrypt(sk_two, ciphertext_one)
 
         with pytest.raises(
             ValueError,
-            match='secret key and ciphertext must have the same associated cluster size'
+            match='ciphertext must have enough shares for cluster size or threshold'
         ):
             nilql.decrypt(sk_three, ciphertext_two)
 
@@ -547,11 +550,12 @@ class TestSecureComputations(TestCase):
         decrypted = nilql.decrypt(sk, [a3, b3, c3])
         self.assertEqual(decrypted, 123 + 456 + 789)
 
-    def test_workflow_for_secure_redundancy_sum_with_multiple_nodes(self):
+    def test_workflow_for_secure_sum_with_multiple_nodes_and_threshold(self):
         """
-        Test secure summation workflow for a cluster that has multiple nodes.
+        Test secure summation workflow with a threshold for a cluster that has
+        multiple nodes.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'redundancy': True})
+        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         (a0, b0, c0) = nilql.encrypt(sk, 123)
         (a1, b1, c1) = nilql.encrypt(sk, 456)
         (a2, b2, c2) = nilql.encrypt(sk, 789)

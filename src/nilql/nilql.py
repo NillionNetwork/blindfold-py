@@ -264,6 +264,7 @@ class SecretKey(dict):
     def generate(
         cluster: dict = None,
         operations: dict = None,
+        threshold: Optional[int] = None,
         seed: Union[bytes, bytearray, str] = None
     ) -> SecretKey:
         """
@@ -286,6 +287,8 @@ class SecretKey(dict):
             'cluster': cluster,
             'operations': operations
         })
+        if threshold is not None:
+            secret_key['threshold'] = threshold
 
         if (
             not isinstance(cluster, dict) or
@@ -294,17 +297,35 @@ class SecretKey(dict):
         ):
             raise ValueError('valid cluster configuration is required')
 
-        if len(cluster['nodes']) < 1:
+        cluster_size = len(secret_key['cluster']['nodes'])
+
+        if cluster_size < 1:
             raise ValueError('cluster configuration must contain at least one node')
 
         if (
             (not isinstance(operations, dict)) or
-            (not set(operations.keys()).issubset({'store', 'match', 'sum', 'redundancy'}))
+            (not set(operations.keys()).issubset({'store', 'match', 'sum'}))
         ):
             raise ValueError('valid operations specification is required')
 
         if len([op for (op, status) in secret_key['operations'].items() if status]) != 1:
             raise ValueError('secret key must support exactly one operation')
+
+        if threshold is not None:
+            if not isinstance(threshold, int):
+                raise TypeError('threshold must be an integer')
+            if threshold < 1 or threshold > cluster_size:
+                raise TypeError(
+                    'threshold must a positive integer not larger than the cluster size'
+                )
+            if cluster_size == 1:
+                raise RuntimeError(
+                    'thresholds are only supported for multiple-node clusters'
+                )
+            if not secret_key['operations'].get('sum'):
+                raise RuntimeError(
+                    'thresholds are only supported for the sum operation'
+                )
 
         if secret_key['operations'].get('store'):
             # Symmetric key for encrypting the plaintext or the shares of a plaintext.
@@ -342,25 +363,6 @@ class SecretKey(dict):
                     for i in range(len(secret_key['cluster']['nodes']))
                 ]
 
-        if secret_key['operations'].get('redundancy'):
-            if len(secret_key['cluster']['nodes']) == 1:
-                raise RuntimeError(
-                    'Redundancy is not supported for single-node clusters'
-                )
-            # Distinct multiplicative mask for each additive share.
-            secret_key['material'] = [
-                _random_int(
-                    1,
-                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1,
-                    (
-                        _random_bytes(64, seed, i.to_bytes(64, 'little'))
-                        if seed is not None else
-                        None
-                    )
-                )
-                for i in range(len(secret_key['cluster']['nodes']))
-            ]
-
         return secret_key
 
     def dump(self: SecretKey) -> dict:
@@ -378,6 +380,8 @@ class SecretKey(dict):
             'cluster': self['cluster'],
             'operations': self['operations'],
         }
+        if 'threshold' in self:
+            dictionary['threshold'] = self['threshold']
 
         if isinstance(self['material'], list):
             # Additive secret sharing node-specific masks.
@@ -411,6 +415,8 @@ class SecretKey(dict):
             'cluster': dictionary['cluster'],
             'operations': dictionary['operations'],
         })
+        if 'threshold' in dictionary:
+            secret_key['threshold'] = dictionary['threshold']
 
         if isinstance(dictionary['material'], list):
             # Additive secret sharing node-specific masks.
@@ -446,7 +452,8 @@ class ClusterKey(SecretKey):
     @staticmethod
     def generate( # pylint: disable=arguments-differ # Seeds not supported.
         cluster: dict = None,
-        operations: dict = None
+        operations: dict = None,
+        threshold: Optional[int] = None
     ) -> ClusterKey:
         """
         Return a cluster key built according to what is specified in the supplied
@@ -466,7 +473,7 @@ class ClusterKey(SecretKey):
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
-        cluster_key = ClusterKey(SecretKey.generate(cluster, operations))
+        cluster_key = ClusterKey(SecretKey.generate(cluster, operations, threshold))
 
         if len(cluster_key['cluster']['nodes']) == 1:
             raise ValueError('cluster configuration must have at least two nodes')
@@ -474,15 +481,6 @@ class ClusterKey(SecretKey):
         # Cluster keys contain no cryptographic material.
         if 'material' in cluster_key:
             del cluster_key['material']
-# =======
-#         # Ensure that the secret key material is the identity value
-#         # for the supported operation.
-#         if len(cluster_key['cluster']['nodes']) > 1:
-#             if cluster_key['operations'].get('store'):
-#                 cluster_key['material'] = bytes(_PLAINTEXT_STRING_BUFFER_LEN_MAX)
-#             if cluster_key['operations'].get('sum') or cluster_key['operations'].get('redundancy'):
-#                 cluster_key['material'] = 1
-# >>>>>>> d7c678d (feat: Add Shamir secret sharing)
 
         return cluster_key
 
@@ -496,10 +494,14 @@ class ClusterKey(SecretKey):
         >>> isinstance(json.dumps(ck.dump()), str)
         True
         """
-        return {
+        dictionary = {
             'cluster': self['cluster'],
-            'operations': self['operations'],
+            'operations': self['operations']
         }
+        if 'threshold' in self:
+            dictionary['threshold'] = self['threshold']
+
+        return dictionary
 
     @staticmethod
     def load(dictionary: dict) -> ClusterKey:
@@ -511,10 +513,14 @@ class ClusterKey(SecretKey):
         >>> ck == ClusterKey.load(ck.dump())
         True
         """
-        return ClusterKey({
+        cluster_key = ClusterKey({
             'cluster': dictionary['cluster'],
             'operations': dictionary['operations'],
         })
+        if 'threshold' in dictionary:
+            cluster_key['threshold'] = dictionary['threshold']
+
+        return cluster_key
 
 class PublicKey(dict):
     """
@@ -619,7 +625,7 @@ def encrypt(
         ):
             raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
         buffer = _encode(plaintext)
-    elif ('sum' in key['operations'] or 'redundancy' in key['operations']):
+    elif 'sum' in key['operations']:
         # Non-integer cannot be encrypted for summation.
         raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
@@ -682,36 +688,33 @@ def encrypt(
         if len(key['cluster']['nodes']) == 1:
             return hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
 
-        # For multiple-node clusters, additive secret sharing is used.
-        masks = [
-            key['material'][i] if 'material' in key else 1
-            for i in range(len(key['cluster']['nodes']))
-        ]
-        shares = []
-        total = 0
-        quantity = len(key['cluster']['nodes'])
-        for i in range(quantity - 1):
-            share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
+        # For multiple-node clusters and no threshold, additive secret sharing is used.
+        if 'threshold' not in key:
+            masks = [
+                key['material'][i] if 'material' in key else 1
+                for i in range(len(key['cluster']['nodes']))
+            ]
+            shares = []
+            total = 0
+            quantity = len(key['cluster']['nodes'])
+            for i in range(quantity - 1):
+                share_ =  _random_int(0, _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 1)
+                shares.append(
+                    (masks[i] * share_)
+                    %
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+
             shares.append(
-                (masks[i] * share_)
-                %
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                (
+                    masks[quantity - 1] *
+                    ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
-            total = (total + share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            return shares
 
-        shares.append(
-            (
-                masks[quantity - 1] *
-                ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        )
-        return shares
-
-    if key['operations'].get('redundancy'):
-        if len(key['cluster']['nodes']) == 1:
-            raise RuntimeError('redundancy is not supported for single-node clusters')
-
-        # Use Shamir's secret sharing for multiple-node clusters.
+        # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
         masks = [
             key['material'][i] if 'material' in key else 1
             for i in range(len(key['cluster']['nodes']))
@@ -722,6 +725,7 @@ def encrypt(
             share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
         return shares
+
     # The below should not occur unless the key's cluster or operations
     # information is malformed/missing or the plaintext is unsupported.
     raise ValueError(
@@ -757,10 +761,10 @@ def decrypt(
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
     >>> decrypt(key, encrypt(key, -10))
     -10
-    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'redundancy': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, 123))
     123
-    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'redundancy': True})
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, -10))
     -10
 
@@ -772,7 +776,7 @@ def decrypt(
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    ValueError: secret key and ciphertext must have the same associated cluster size
+    ValueError: secret key requires a valid ciphertext from a multiple-node cluster
     >>> decrypt(
     ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
     ...     'abc'
@@ -794,6 +798,7 @@ def decrypt(
             )
     else:
         if (
+            isinstance(ciphertext, str) or # Must be a container sequence.
             (not isinstance(ciphertext, Sequence)) or
             (not (
                 all(
@@ -814,10 +819,14 @@ def decrypt(
 
         if (
             isinstance(ciphertext, Sequence) and
-            len(key['cluster']['nodes']) != len(ciphertext)
-        ) and not key['operations'].get('redundancy'):
+            len(ciphertext) < (
+                key['threshold']
+                if 'threshold' in key else
+                len(key['cluster']['nodes'])
+            )
+        ):
             raise ValueError(
-              'secret key and ciphertext must have the same associated cluster size'
+              'ciphertext must have enough shares for cluster size or threshold'
             )
 
     # Decrypt a value that was encrypted for storage and retrieval.
@@ -861,36 +870,32 @@ def decrypt(
                 pailliers.cipher(int(ciphertext, 16))
             )
 
-        # For multiple-node clusters, additive secret sharing is used.
-        inverse_masks = [
-            pow(
-                key['material'][i] if 'material' in key else 1,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-            )
-            for i in range(len(key['cluster']['nodes']))
-        ]
-        shares = ciphertext
-        plaintext = 0
-        for (i, share_) in enumerate(shares):
-            plaintext = (
-                plaintext +
-                ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        # For multiple-node clusters and no threshold, additive secret sharing is used.
+        if 'threshold' not in key:
+            inverse_masks = [
+                pow(
+                    key['material'][i] if 'material' in key else 1,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                for i in range(len(key['cluster']['nodes']))
+            ]
+            shares = ciphertext
+            plaintext = 0
+            for (i, share_) in enumerate(shares):
+                plaintext = (
+                    plaintext +
+                    ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-        # Field elements in the "upper half" of the field represent negative
-        # integers.
-        if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-            plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            # Field elements in the "upper half" of the field represent negative
+            # integers.
+            if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
+                plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-        return plaintext
+            return plaintext
 
-    # Decrypt a value that was encrypted in a summation-compatible way.
-    if key['operations'].get('redundancy'):
-        if len(key['cluster']['nodes']) == 1:
-            raise RuntimeError('redundancy is not supported for single-node clusters')
-
-        # For multiple-node clusters, additive secret sharing is used.
+        # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
         inverse_masks = [
             pow(
                 key['material'][i] if 'material' in key else 1,

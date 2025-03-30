@@ -26,30 +26,28 @@ Description and Purpose
 -----------------------
 This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities that nilQL makes available.
 
-+-------------+------------+------------------------------------+------------------------------------+
-| Cluster     | Operation  | Implementation Details             | Supported Types                    |
-+=============+============+====================================+====================================+
-|             | store      | | XSalsa20 stream cipher           | | 32-bit signed integer            |
-|             |            | | Poly1305 MAC                     | | UTF-8 string (<4097 bytes)       |
-|             +------------+------------------------------------+------------------------------------+
-| | single    | match      | | deterministic salted hashing     | | 32-bit signed integer            |
-| | node      |            | | via SHA-512                      | | UTF-8 string (<4097 bytes)       |
-|             +------------+------------------------------------+------------------------------------+
-|             | sum        | | non-deterministic Paillier       | 32-bit signed integer              |
-|             |            | | with 2048-bit primes             |                                    |
-+-------------+------------+------------------------------------+------------------------------------+
-|             | store      | XOR-based secret sharing           | | 32-bit signed integer            |
-|             |            |                                    | | UTF-8 string (<4097 bytes)       |
-|             +------------+------------------------------------+------------------------------------+
-| | multiple  | match      | | deterministic salted hashing     | | 32-bit signed integer            |
-| | nodes     |            | | via SHA-512                      | | UTF-8 string (<4097 bytes)       |
-|             +------------+------------------------------------+------------------------------------+
-|             | sum        | | additive secret sharing          | 32-bit signed integer              |
-|             |            | | (prime modulus 2^32 + 15)        |                                    |
-|             +------------+------------------------------------+------------------------------------+
-|             | redundancy | | Shamir secret sharing            | 32-bit signed integer              |
-|             |            | | (prime modulus 2^32 + 15)        |                                    |
-+-------------+------------+------------------------------------+------------------------------------+
++-------------+-----------+------------------------------------------+------------------------------+
+| Cluster     | Operation | Implementation Details                   | Supported Types              |
++=============+===========+==========================================+==============================+
+|             | store     | | XSalsa20 stream cipher                 | | 32-bit signed integer      |
+|             |           | | Poly1305 MAC                           | | UTF-8 string (<4097 bytes) |
+|             +-----------+------------------------------------------+------------------------------+
+| | single    | match     | | deterministic salted hashing           | | 32-bit signed integer      |
+| | node      |           | | via SHA-512                            | | UTF-8 string (<4097 bytes) |
+|             +-----------+------------------------------------------+------------------------------+
+|             | sum       | | non-deterministic Paillier             | 32-bit signed integer        |
+|             |           | | with 2048-bit primes                   |                              |
++-------------+-----------+------------------------------------------+------------------------------+
+|             | store     | XOR-based secret sharing                 | | 32-bit signed integer      |
+|             |           |                                          | | UTF-8 string (<4097 bytes) |
+|             +-----------+------------------------------------------+------------------------------+
+| | multiple  | match     | | deterministic salted hashing           | | 32-bit signed integer      |
+| | nodes     |           | | via SHA-512                            | | UTF-8 string (<4097 bytes) |
+|             +-----------+------------------------------------------+------------------------------+
+|             | sum       | | additive secret sharing (no threshold) | 32-bit signed integer        |
+|             |           | | Shamir secret sharing (with threshold) |                              |
+|             |           | | (prime modulus 2^32 + 15 for both)     |                              |
++-------------+-----------+------------------------------------------+------------------------------+
 
 Installation and Usage
 ----------------------
