@@ -3,7 +3,7 @@ Python library for working with encrypted data within nilDB queries and
 replies.
 """
 from __future__ import annotations
-from typing import Union, Optional, Sequence, Tuple
+from typing import Union, Optional, Sequence
 import doctest
 import base64
 import secrets
@@ -29,7 +29,6 @@ _HASH = hashlib.sha512
 
 _SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION = 2
 """Minimum number of shares required to reconstruct a Shamir secret."""
-
 
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
@@ -113,7 +112,9 @@ def _random_int(
     return minimum + secrets.randbelow(maximum + 1 - minimum)
 
 def _eval_at(poly, x, prime):
-    """Evaluates polynomial (coefficient tuple) at x."""
+    """
+    Evaluates polynomial (coefficient tuple) at x.
+    """
     accum = 0
     for coeff in reversed(poly):
         accum *= x
@@ -127,11 +128,14 @@ def _shamir_secret_share(
         minimum_shares=_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION,
         prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS
 ):
-    """Generates a random shamir pool for a given secret, returns share points."""
+    """
+    Generates a random shamir pool for a given secret, returns share points.
+    """
     if minimum_shares > total_shares:
         raise ValueError("Pool secret would be irrecoverable.")
+
     poly = [secret] + [secrets.randbelow(prime - 1) for _ in range(minimum_shares - 1)]
-    points = [(i, _eval_at(poly, i, prime)) for i in range(1, total_shares + 1)]
+    points = [[i, _eval_at(poly, i, prime)] for i in range(1, total_shares + 1)]
     return points
 
 def _extended_gcd(a, b):
@@ -146,14 +150,18 @@ def _extended_gcd(a, b):
     return last_x, last_y
 
 def _divmod(num, den, p):
-    """Compute num / den modulo prime p."""
+    """
+    Compute num / den modulo prime p.
+    """
     inv, _ = _extended_gcd(den, p)
     return num * inv % p
 
 def _lagrange_interpolate(x, x_s, y_s, p):
-    """Find the y-value for the given x using Lagrange interpolation."""
+    """
+    Find the y-value for the given x using Lagrange interpolation.
+    """
     k = len(x_s)
-    assert k == len(set(x_s)), "Points must be distinct"
+    assert k == len(set(x_s)), "points must be distinct"
 
     def _multiply(vals):
         accum = 1
@@ -173,18 +181,28 @@ def _lagrange_interpolate(x, x_s, y_s, p):
     return (_divmod(num, den, p) + p) % p
 
 def _recover_shamir_secret(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
-    """Recover the secret from share points."""
+    """
+    Recover the secret from share points.
+    """
     if len(shares) < _SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION:
-        raise ValueError(f"Need at least {_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares")
-    x_s, y_s = zip(*shares)
-    return _lagrange_interpolate(0, x_s, y_s, prime)
+        raise ValueError(
+            f'need at least {_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares'
+        )
+
+    return _lagrange_interpolate(0, *zip(*shares), prime)
 
 def add_shamir_shares(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
-    """Adds two sets of shares pointwise, assuming they use the same x-values."""
+    """
+    Adds two sets of shares pointwise, assuming they use the same x-values.
+    """
     if len(shares1) != len(shares2):
-        raise ValueError("Shares sets must have the same length")
-    added_shares = [(x1, (y1 + y2) % prime) for (x1, y1), (x2, y2) in zip(shares1, shares2) if x1 == x2]
-    return added_shares
+        raise ValueError('shares sets must have the same length')
+
+    return [
+        [x1, (y1 + y2) % prime]
+        for (x1, y1), (x2, y2) in zip(shares1, shares2)
+        if x1 == x2
+    ]
 
 def _pack(b: bytes) -> str:
     """
@@ -360,6 +378,7 @@ class SecretKey(dict):
                 raise RuntimeError(
                     'Redundancy is not supported for single-node clusters'
                 )
+            # Distinct multiplicative mask for each additive share.
             secret_key['material'] = [
                 _random_int(
                     1,
@@ -612,7 +631,7 @@ class PublicKey(dict):
 def encrypt(
         key: Union[SecretKey, PublicKey],
         plaintext: Union[int, str, bytes]
-    ) -> Union[str, Sequence[str], Sequence[int], Sequence[Tuple[int, int]]]:
+    ) -> Union[str, Sequence[str], Sequence[int], Sequence[Sequence[int]]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
@@ -631,8 +650,8 @@ def encrypt(
         ):
             raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
         buffer = _encode(plaintext)
-    elif ('sum' in key['operations'] or
-          'redundancy' in key['operations']): # Non-integer cannot be encrypted for summation.
+    elif ('sum' in key['operations'] or 'redundancy' in key['operations']):
+        # Non-integer cannot be encrypted for summation.
         raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
     # Encode string or binary data for storage or matching.
@@ -720,23 +739,20 @@ def encrypt(
         return shares
 
     if key['operations'].get('redundancy'):
-        quantity = len(key['cluster']['nodes'])
-        if quantity == 1:
-            raise RuntimeError(
-                'Redundancy is not supported for single-node clusters'
-            )
-        # Use Shamir secret sharing for multiple-node clusters.
-        shamir_shares = _shamir_secret_share(plaintext, quantity)
+        if len(key['cluster']['nodes']) == 1:
+            raise RuntimeError('redundancy is not supported for single-node clusters')
+
+        # Use Shamir's secret sharing for multiple-node clusters.
         masks = [
             key['material'][i] if 'material' in key else 1
-            for i in range(quantity)
+            for i in range(len(key['cluster']['nodes']))
         ]
-        shares = [
-            (x, int((y * mask) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS))
-            for ((x, y), mask) in zip(shamir_shares, masks)
-        ]
-        return shares
+        num_nodes = len(key['cluster']['nodes'])
+        shares = _shamir_secret_share(plaintext, num_nodes)
+        for (i, share) in enumerate(shares):
+            share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
+        return shares
     # The below should not occur unless the key's cluster or operations
     # information is malformed/missing or the plaintext is unsupported.
     raise ValueError(
@@ -745,7 +761,7 @@ def encrypt(
 
 def decrypt(
         key: SecretKey,
-        ciphertext: Union[str, Sequence[str], Sequence[int], Sequence[Tuple[int, int]]]
+        ciphertext: Union[str, Sequence[str], Sequence[int], Sequence[Sequence[int]]]
     ) -> Union[int, str, bytes]:
     """
     Return the plaintext obtained by using the supplied key to decrypt the
@@ -812,8 +828,11 @@ def decrypt(
             (not isinstance(ciphertext, Sequence)) or
             (not (
                 all(
-                    isinstance(c, tuple) and len(c) == 2 and
-                    all(isinstance(x, int) for x in c)
+                    (
+                        isinstance(c, Sequence) and
+                        len(c) == 2 and
+                        all(isinstance(x, int) for x in c)
+                    )
                     for c in ciphertext
                 ) or
                 all(isinstance(c, int) for c in ciphertext) or
@@ -897,12 +916,12 @@ def decrypt(
 
         return plaintext
 
+    # Decrypt a value that was encrypted in a summation-compatible way.
     if key['operations'].get('redundancy'):
         if len(key['cluster']['nodes']) == 1:
-            raise RuntimeError(
-                'Redundancy is not supported for single-node clusters'
-            )
+            raise RuntimeError('redundancy is not supported for single-node clusters')
 
+        # For multiple-node clusters, additive secret sharing is used.
         inverse_masks = [
             pow(
                 key['material'][i] if 'material' in key else 1,
@@ -911,14 +930,15 @@ def decrypt(
             )
             for i in range(len(key['cluster']['nodes']))
         ]
-        unmasked_shares = [
-            (x, (y * inverse_masks[x - 1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-            for (x, y) in ciphertext
-        ]
+        shares = ciphertext
+        for (i, share) in enumerate(shares):
+            share[1] = (
+                inverse_masks[share[0] - 1] * shares[i][1]
+            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        plaintext = _recover_shamir_secret(shares)
 
-        # Use Shamir secret sharing for multiple-node clusters.
-        plaintext = _recover_shamir_secret(unmasked_shares)
-
+        # Field elements in the "upper half" of the field represent negative
+        # integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
             plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
