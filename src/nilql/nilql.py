@@ -9,6 +9,7 @@ import base64
 import secrets
 import hashlib
 import hmac
+from lagrange import lagrange
 import bcl
 import pailliers
 
@@ -27,7 +28,7 @@ _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 _HASH = hashlib.sha512
 """Hash function used for HKDF and matching."""
 
-_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION = 2
+_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION = 2
 """Minimum number of shares required to reconstruct a Shamir secret."""
 
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
@@ -111,7 +112,7 @@ def _random_int(
 
     return minimum + secrets.randbelow(maximum + 1 - minimum)
 
-def _eval_at(poly, x, prime):
+def _shamirs_eval(poly, x, prime):
     """
     Evaluates polynomial (coefficient tuple) at x.
     """
@@ -122,76 +123,34 @@ def _eval_at(poly, x, prime):
         accum %= prime
     return accum
 
-def _shamir_secret_share(
+def _shamirs_shares(
         secret,
         total_shares,
-        minimum_shares=_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION,
+        minimum_shares=_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION,
         prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS
 ):
     """
-    Generates a random shamir pool for a given secret, returns share points.
+    Generates a random Shamir pool for a given secret and returns share points.
     """
     if minimum_shares > total_shares:
         raise ValueError("Pool secret would be irrecoverable.")
 
     poly = [secret] + [secrets.randbelow(prime - 1) for _ in range(minimum_shares - 1)]
-    points = [[i, _eval_at(poly, i, prime)] for i in range(1, total_shares + 1)]
+    points = [[i, _shamirs_eval(poly, i, prime)] for i in range(1, total_shares + 1)]
     return points
 
-def _extended_gcd(a, b):
-    """Extended Euclidean algorithm for modular inverse."""
-    x, last_x = 0, 1
-    y, last_y = 1, 0
-    while b != 0:
-        quot = a // b
-        a, b = b, a % b
-        x, last_x = last_x - quot * x, x
-        y, last_y = last_y - quot * y, y
-    return last_x, last_y
-
-def _divmod(num, den, p):
-    """
-    Compute num / den modulo prime p.
-    """
-    inv, _ = _extended_gcd(den, p)
-    return num * inv % p
-
-def _lagrange_interpolate(x, x_s, y_s, p):
-    """
-    Find the y-value for the given x using Lagrange interpolation.
-    """
-    k = len(x_s)
-    assert k == len(set(x_s)), "points must be distinct"
-
-    def _multiply(vals):
-        accum = 1
-        for v in vals:
-            accum *= v
-        return accum
-
-    nums, dens = [], []
-    for i in range(k):
-        others = list(x_s)
-        cur = others.pop(i)
-        nums.append(_multiply(x - o for o in others))
-        dens.append(_multiply(cur - o for o in others))
-
-    den = _multiply(dens)
-    num = sum(_divmod(nums[i] * den * y_s[i] % p, dens[i], p) for i in range(k))
-    return (_divmod(num, den, p) + p) % p
-
-def _recover_shamir_secret(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
+def _shamirs_recover(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
     Recover the secret from share points.
     """
-    if len(shares) < _SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION:
+    if len(shares) < _SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION:
         raise ValueError(
-            f'need at least {_SHAMIR_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares'
+            f'need at least {_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares'
         )
 
-    return _lagrange_interpolate(0, *zip(*shares), prime)
+    return lagrange(shares, prime)
 
-def add_shamir_shares(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
+def _shamirs_add(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
     Adds two sets of shares pointwise, assuming they use the same x-values.
     """
@@ -748,7 +707,7 @@ def encrypt(
             for i in range(len(key['cluster']['nodes']))
         ]
         num_nodes = len(key['cluster']['nodes'])
-        shares = _shamir_secret_share(plaintext, num_nodes)
+        shares = _shamirs_shares(plaintext, num_nodes)
         for (i, share) in enumerate(shares):
             share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
@@ -935,7 +894,7 @@ def decrypt(
             share[1] = (
                 inverse_masks[share[0] - 1] * shares[i][1]
             ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        plaintext = _recover_shamir_secret(shares)
+        plaintext = _shamirs_recover(shares)
 
         # Field elements in the "upper half" of the field represent negative
         # integers.
