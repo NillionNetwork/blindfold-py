@@ -13,6 +13,9 @@ from lagrange import lagrange
 import bcl
 import pailliers
 
+_PAILLIER_KEY_LENGTH = 2048
+"""Length in bits of Paillier keys."""
+
 _PLAINTEXT_SIGNED_INTEGER_MIN = -2147483648
 """Minimum plaintext 32-bit signed integer value that can be encrypted."""
 
@@ -250,6 +253,13 @@ class SecretKey(dict):
     """
     Data structure for representing all categories of secret key instances.
     """
+
+    _paillier_key_length = _PAILLIER_KEY_LENGTH
+    """
+    Static parameter for Paillier cryptosystem (introduced in order to allow
+    modification in tests).
+    """
+
     @staticmethod
     def generate(
         cluster: dict = None,
@@ -316,7 +326,7 @@ class SecretKey(dict):
                         'seed-based derivation of summation-compatible keys ' +
                         'is not supported for single-node clusters'
                     )
-                secret_key['material'] = pailliers.secret(256)
+                secret_key['material'] = pailliers.secret(SecretKey._paillier_key_length)
             else:
                 # Distinct multiplicative mask for each additive share.
                 secret_key['material'] = [

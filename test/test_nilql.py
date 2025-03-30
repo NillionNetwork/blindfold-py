@@ -12,8 +12,10 @@ import pytest
 
 import nilql
 
-_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
+# Modify the Paillier secret key length to reduce running time of tests.
+nilql.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
 
+_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 
 def _shamirs_add(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
