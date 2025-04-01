@@ -735,9 +735,14 @@ def encrypt(
         shares = []
         aggregate = bytes(len(buffer))
         for _ in range(len(key['cluster']['nodes']) - 1):
-            mask = _random_bytes(len(buffer))
+            if len(buffer) > 64:
+                seed = _random_bytes(64)
+                mask = _random_bytes(len(buffer), seed)
+                shares.append(optional_enc(seed))
+            else:
+                mask = _random_bytes(len(buffer))
+                shares.append(optional_enc(mask))
             aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
-            shares.append(optional_enc(mask))
         shares.append(optional_enc(
             bytes(a ^ b for (a, b) in zip(aggregate, buffer))
         ))
@@ -943,8 +948,10 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        bytes_ = bytes(len(shares[0]))
-        for share_ in shares:
+        bytes_ = bytes(shares[-1])
+        for share_ in shares[:-1]:
+            if len(bytes_) != len(share_):
+                share_ = _random_bytes(len(bytes_), share_)
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
 
         return _decode(bytes_)
