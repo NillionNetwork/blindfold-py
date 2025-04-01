@@ -31,9 +31,6 @@ _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 _HASH = hashlib.sha512
 """Hash function used for HKDF and matching."""
 
-_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION = 2
-"""Minimum number of shares required to reconstruct a Shamir secret."""
-
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
     Extracts a pseudorandom key (PRK) using HMAC with the given salt and input key material.
@@ -138,7 +135,7 @@ def _shamirs_eval(poly, x, prime):
 def _shamirs_shares(
         secret,
         total_shares,
-        minimum_shares=_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION,
+        minimum_shares,
         prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS
 ):
     """
@@ -162,16 +159,11 @@ def _shamirs_recover(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
     """
     Recover the secret value from the supplied share instances.
 
-    >>> _shamirs_recover([123])
-    Traceback (most recent call last):
-      ...
-    ValueError: at least 2 shares are required
+    >>> _shamirs_recover([[0, 123]])
+    123
+    >>> _shamirs_recover([[0, 123], [1, 123], [2, 123]])
+    123
     """
-    if len(shares) < _SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION:
-        raise ValueError(
-            f'at least {_SHAMIRS_MINIMUM_SHARES_FOR_RECONSTRUCTION} shares are required'
-        )
-
     return lagrange(shares, prime)
 
 def _shamirs_add(shares_a, shares_b, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
@@ -804,7 +796,7 @@ def encrypt(
             for i in range(len(key['cluster']['nodes']))
         ]
         num_nodes = len(key['cluster']['nodes'])
-        shares = _shamirs_shares(plaintext, num_nodes)
+        shares = _shamirs_shares(plaintext, num_nodes, key['threshold'])
         for (i, share) in enumerate(shares):
             share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
@@ -845,6 +837,15 @@ def decrypt(
     -10
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, 123))
+    123
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}, {}]}, {'sum': True}, threshold=3)
+    >>> decrypt(key, encrypt(key, 123)[:-1])
+    123
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}, {}]}, {'sum': True}, threshold=2)
+    >>> decrypt(key, encrypt(key, 123)[2:])
+    123
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=1)
+    >>> decrypt(key, encrypt(key, 123)[1:])
     123
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, -10))
