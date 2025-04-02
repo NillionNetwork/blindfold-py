@@ -948,8 +948,11 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        bytes_ = bytes(shares[-1])
-        for share_ in shares[:-1]:
+        lens = [len(share) for share in shares]
+        indices = sorted(range(len(lens)), key=lambda i: -lens[i])
+        shares = [shares[i] for i in indices]
+        bytes_ = bytes(shares[0])
+        for share_ in shares[1:]:
             if len(bytes_) != len(share_):
                 share_ = _random_bytes(len(bytes_), share_)
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
