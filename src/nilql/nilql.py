@@ -31,6 +31,9 @@ _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 _HASH = hashlib.sha512
 """Hash function used for HKDF and matching."""
 
+_SEED_LEN = 64
+"""Length of random number generator seed."""
+
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
     Extracts a pseudorandom key (PRK) using HMAC with the given salt and input key material.
@@ -735,8 +738,10 @@ def encrypt(
         shares = []
         aggregate = bytes(len(buffer))
         for _ in range(len(key['cluster']['nodes']) - 1):
-            if len(buffer) > 64:
-                seed = _random_bytes(64)
+            # If the plaintext length is more than the length of the seed, use the
+            # seed to generate the mask, otherwise, generate it directly.
+            if len(buffer) > _SEED_LEN:
+                seed = _random_bytes(_SEED_LEN)
                 mask = _random_bytes(len(buffer), seed)
                 shares.append(optional_enc(seed))
             else:
@@ -948,11 +953,16 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
+        # We bring the true share first and leave the seeds last, or if everything
+        # is a share, the following lines don't do anything.
         lens = [len(share) for share in shares]
         indices = sorted(range(len(lens)), key=lambda i: -lens[i])
         shares = [shares[i] for i in indices]
+
         bytes_ = bytes(shares[0])
         for share_ in shares[1:]:
+            # If the share_ is not of same length as the first share, this means
+            # that it is a seed. So generate share from the seed.
             if len(bytes_) != len(share_):
                 share_ = _random_bytes(len(bytes_), share_)
             bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
