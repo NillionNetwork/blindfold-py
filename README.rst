@@ -49,6 +49,16 @@ This library provides cryptographic operations that are compatible with nilDB no
 |             |           | | (prime modulus 2^32 + 15 for both)     |                              |
 +-------------+-----------+------------------------------------------+------------------------------+
 
+Key Types and Thresholds
+------------------------
+The library provides two main types of keys:
+
+1. **SecretKey**: Used for operations within a single node or across multiple nodes. It contains cryptographic material for encryption, decryption, and other operations. The `SecretKey` uses blinding masks, which are held only by the client. This ensures that even if all servers in the cluster collude, the client retains ultimate control over their data.
+
+2. **ClusterKey**: Represents a cluster configuration without cryptographic material. It is used for managing multi-node clusters. Unlike the `SecretKey`, the `ClusterKey` does not use blinding masks, meaning the servers hold shares of the data.
+
+Thresholds are supported for summation operations in multi-node clusters. A threshold specifies the minimum number of nodes required to reconstruct the original data. For example, Shamir's secret sharing is used when a threshold is set, ensuring that data can only be reconstructed if the required number of shares is available.
+
 Installation and Usage
 ----------------------
 The library can be imported in the usual ways:
@@ -58,19 +68,49 @@ The library can be imported in the usual ways:
     import nilql
     from nilql import *
 
-Example
-^^^^^^^^
-An example workflow that demonstrates use of the library is presented below:
+Examples and Usage
+------------------
+
+Generating Keys
+^^^^^^^^^^^^^^^
+
+To generate a `SecretKey` for a single-node cluster:
 
 .. code-block:: python
 
-    import nilql
+    from nilql import SecretKey
+
+    cluster = {'nodes': [{}]}
+    secret_key = SecretKey.generate(cluster, {'store': True})
+
+For a multi-node (e.g., 3) cluster with a threshold:
+
+.. code-block:: python
+
     cluster = {'nodes': [{}, {}, {}]}
-    secret_key = nilql.SecretKey.generate(cluster, {'store': True})
+    secret_key = SecretKey.generate(cluster, {'sum': True}, threshold=2)
+
+Encrypting and Decrypting Data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Encrypting and decrypting an integer:
+
+.. code-block:: python
+
     plaintext = 123
     ciphertext = nilql.encrypt(secret_key, plaintext)
     decrypted = nilql.decrypt(secret_key, ciphertext)
-    assert(plaintext == decrypted)
+    assert plaintext == decrypted
+
+Encrypting and decrypting a string:
+
+.. code-block:: python
+
+    plaintext = "hello"
+    ciphertext = nilql.encrypt(secret_key, plaintext)
+    decrypted = nilql.decrypt(secret_key, ciphertext)
+    assert plaintext == decrypted
+
 
 Development
 -----------
