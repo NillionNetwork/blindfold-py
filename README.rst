@@ -49,15 +49,13 @@ This library provides cryptographic operations that are compatible with nilDB no
 |             |           | | (prime modulus 2^32 + 15 for both)     |                              |
 +-------------+-----------+------------------------------------------+------------------------------+
 
-Key Types and Thresholds
-------------------------
-The library provides two main types of keys:
+The library supports two categories of keys:
 
-1. **SecretKey**: Used for operations within a single node or across multiple nodes. It contains cryptographic material for encryption, decryption, and other operations. The `SecretKey` uses blinding masks, which are held only by the client. This ensures that even if all servers in the cluster collude, the client retains ultimate control over their data.
+1. ``SecretKey``: Keys in this category support operations within a single node or across multiple nodes. These contain cryptographic material for encryption, decryption, and other operations. Notably, a ``SecretKey`` instance includes blinding masks that a client need not share with the cluster. By using ``SecretKey`` instances a client can retain exclusive access to its data *even if all servers in a cluster collude*. 
 
-2. **ClusterKey**: Represents a cluster configuration without cryptographic material. It is used for managing multi-node clusters. Unlike the `SecretKey`, the `ClusterKey` does not use blinding masks, meaning the servers hold shares of the data.
+2. ``ClusterKey``: Keys in this category represent cluster configurations but do not contain cryptographic material. These can be used for managing multiple-node clusters. Unlike ``SecretKey`` instances, ``ClusterKey`` instances do not incorporate blinding masks. This means each node in a cluster has access to a raw secret share of encrypted data.
 
-Thresholds are supported for summation operations in multi-node clusters. A threshold specifies the minimum number of nodes required to reconstruct the original data. For example, Shamir's secret sharing is used when a threshold is set, ensuring that data can only be reconstructed if the required number of shares is available.
+Threshold secret sharing is supported when encrypting in a summation-compatible way for multiple-node clusters. A threshold specifies the minimum number of nodes required to reconstruct the original data. Shamir's secret sharing is employed when encrypting with a threshold value, ensuring that encrypted data can only be decrypted if the required number of shares is available.
 
 Installation and Usage
 ----------------------
@@ -68,13 +66,10 @@ The library can be imported in the usual ways:
     import nilql
     from nilql import *
 
-Examples and Usage
-------------------
+Example: Generating Keys
+^^^^^^^^^^^^^^^^^^^^^^^^
 
-Generating Keys
-^^^^^^^^^^^^^^^
-
-To generate a `SecretKey` for a single-node cluster:
+The example below generates a ``SecretKey`` instance for a single-node cluster:
 
 .. code-block:: python
 
@@ -83,17 +78,17 @@ To generate a `SecretKey` for a single-node cluster:
     cluster = {'nodes': [{}]}
     secret_key = SecretKey.generate(cluster, {'store': True})
 
-For a multi-node (e.g., 3) cluster with a threshold:
+The example below generates a ``SecretKey`` instance for a multiple-node (*i.e.*, three-node) cluster with a two-share decryption threshold:
 
 .. code-block:: python
 
     cluster = {'nodes': [{}, {}, {}]}
     secret_key = SecretKey.generate(cluster, {'sum': True}, threshold=2)
 
-Encrypting and Decrypting Data
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Example: Encrypting and Decrypting Data
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Encrypting and decrypting an integer:
+The below example encrypts and decrypts an integer:
 
 .. code-block:: python
 
@@ -102,7 +97,7 @@ Encrypting and decrypting an integer:
     decrypted = nilql.decrypt(secret_key, ciphertext)
     assert plaintext == decrypted
 
-Encrypting and decrypting a string:
+The below example encrypts and decrypts a string:
 
 .. code-block:: python
 
