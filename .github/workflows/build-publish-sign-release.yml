@@ -37,7 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/nilql
+      url: https://pypi.org/p/blindfold
     permissions:
       id-token: write
     steps:

@@ -1,5 +1,5 @@
 [project]
-name = "nilql"
+name = "blindfold"
 version = "0.0.0a14"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.urls]
-Repository = "https://github.com/nillionnetwork/nilql-py"
+Repository = "https://github.com/nillionnetwork/blindfold-py"
 
 [project.optional-dependencies]
 docs = [
@@ -42,4 +42,4 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --ignore=docs --cov=nilql --cov-report term-missing"
+addopts = "--doctest-modules --ignore=docs --cov=blindfold --cov-report term-missing"

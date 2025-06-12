@@ -21,7 +21,7 @@ jobs:
       - name: Lint and test module.
         run: |
           pip install -U .[lint,test]
-          python -m pylint nilql test/test_nilql.py # Check against linting rules.
+          python -m pylint blindfold test/test_blindfold.py # Check against linting rules.
           python -m pytest # Run tests.
       - name: Publish coverage results.
         run: |

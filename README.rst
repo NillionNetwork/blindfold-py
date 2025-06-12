@@ -1,30 +1,30 @@
-=====
-nilql
-=====
+=========
+blindfold
+=========
 
 Library for working with encrypted data within nilDB queries and replies.
 
 |pypi| |readthedocs| |actions| |coveralls|
 
-.. |pypi| image:: https://badge.fury.io/py/nilql.svg#
-   :target: https://badge.fury.io/py/nilql
+.. |pypi| image:: https://badge.fury.io/py/blindfold.svg#
+   :target: https://badge.fury.io/py/blindfold
    :alt: PyPI version and link.
 
-.. |readthedocs| image:: https://readthedocs.org/projects/nilql/badge/?version=latest
-   :target: https://nilql.readthedocs.io/en/latest/?badge=latest
+.. |readthedocs| image:: https://readthedocs.org/projects/blindfold/badge/?version=latest
+   :target: https://blindfold.readthedocs.io/en/latest/?badge=latest
    :alt: Read the Docs documentation status.
 
-.. |actions| image:: https://github.com/nillionnetwork/nilql-py/workflows/lint-test-cover-docs/badge.svg#
-   :target: https://github.com/nillionnetwork/nilql-py/actions/workflows/lint-test-cover-docs.yml
+.. |actions| image:: https://github.com/nillionnetwork/blindfold-py/workflows/lint-test-cover-docs/badge.svg#
+   :target: https://github.com/nillionnetwork/blindfold-py/actions/workflows/lint-test-cover-docs.yml
    :alt: GitHub Actions status.
 
-.. |coveralls| image:: https://coveralls.io/repos/github/NillionNetwork/nilql-py/badge.svg?branch=main
-   :target: https://coveralls.io/github/NillionNetwork/nilql-py?branch=main
+.. |coveralls| image:: https://coveralls.io/repos/github/NillionNetwork/blindfold-py/badge.svg?branch=main
+   :target: https://coveralls.io/github/NillionNetwork/blindfold-py?branch=main
    :alt: Coveralls test coverage summary.
 
 Description and Purpose
 -----------------------
-This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities that nilQL makes available.
+This library provides cryptographic operations that are compatible with nilDB nodes and clusters, allowing developers to leverage certain privacy-enhancing technologies (PETs) when storing, operating upon, and retrieving data while working with nilDB. The table below summarizes the functionalities that blindfold makes available.
 
 +-------------+-----------+------------------------------------------+------------------------------+
 | Cluster     | Operation | Implementation Details                   | Supported Types              |
@@ -63,8 +63,8 @@ The library can be imported in the usual ways:
 
 .. code-block:: python
 
-    import nilql
-    from nilql import *
+    import blindfold
+    from blindfold import *
 
 Example: Generating Keys
 ^^^^^^^^^^^^^^^^^^^^^^^^
@@ -73,7 +73,7 @@ The example below generates a ``SecretKey`` instance for a single-node cluster:
 
 .. code-block:: python
 
-    from nilql import SecretKey
+    from blindfold import SecretKey
 
     cluster = {'nodes': [{}]}
     secret_key = SecretKey.generate(cluster, {'store': True})
@@ -93,8 +93,8 @@ The below example encrypts and decrypts an integer:
 .. code-block:: python
 
     plaintext = 123
-    ciphertext = nilql.encrypt(secret_key, plaintext)
-    decrypted = nilql.decrypt(secret_key, ciphertext)
+    ciphertext = blindfold.encrypt(secret_key, plaintext)
+    decrypted = blindfold.decrypt(secret_key, ciphertext)
     assert plaintext == decrypted
 
 The below example encrypts and decrypts a string:
@@ -102,8 +102,8 @@ The below example encrypts and decrypts a string:
 .. code-block:: python
 
     plaintext = "hello"
-    ciphertext = nilql.encrypt(secret_key, plaintext)
-    decrypted = nilql.decrypt(secret_key, ciphertext)
+    ciphertext = blindfold.encrypt(secret_key, plaintext)
+    decrypted = blindfold.decrypt(secret_key, ciphertext)
     assert plaintext == decrypted
 
 
@@ -138,18 +138,18 @@ The subset of the unit tests included in the module itself and can be executed u
 
 .. code-block:: bash
 
-    python src/nilql/nilql.py -v
+    python src/blindfold/blindfold.py -v
 
 Style conventions are enforced using `Pylint <https://pylint.readthedocs.io>`__:
 
 .. code-block:: bash
 
     python -m pip install ".[lint]"
-    python -m pylint src/nilql test/test_nilql.py
+    python -m pylint src/blindfold test/test_blindfold.py
 
 Contributions
 ^^^^^^^^^^^^^
-In order to contribute to the source code, open an issue or submit a pull request on the `GitHub page <https://github.com/nillionnetwork/nilql-py>`__ for this library.
+In order to contribute to the source code, open an issue or submit a pull request on the `GitHub page <https://github.com/nillionnetwork/blindfold-py>`__ for this library.
 
 Versioning
 ^^^^^^^^^^
@@ -157,6 +157,6 @@ The version number format for this library and the changes to the library associ
 
 Publishing
 ^^^^^^^^^^
-This library can be published as a `package on PyPI <https://pypi.org/project/nilql>`__ via the GitHub Actions workflow found in ``.github/workflows/build-publish-sign-release.yml`` that follows the `recommendations found in the Python Packaging User Guide <https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/>`__.
+This library can be published as a `package on PyPI <https://pypi.org/project/blindfold>`__ via the GitHub Actions workflow found in ``.github/workflows/build-publish-sign-release.yml`` that follows the `recommendations found in the Python Packaging User Guide <https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/>`__.
 
 Ensure that any links in this README document to the Read the Docs documentation of this package (or its dependencies) have appropriate version numbers. Also ensure that the Read the Docs project for this library has an `automation rule <https://docs.readthedocs.io/en/stable/automation-rules.html>`__ that activates and sets as the default all tagged versions.

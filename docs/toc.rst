@@ -2,4 +2,4 @@
    :maxdepth: 3
    :hidden:
 
-   _source/nilql
+   _source/blindfold

@@ -10,10 +10,10 @@ import base64
 import hashlib
 import pytest
 
-import nilql
+import blindfold
 
 # Modify the Paillier secret key length to reduce running time of tests.
-nilql.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
+blindfold.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
 
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 
@@ -40,7 +40,7 @@ def to_hash_base64(output: Union[bytes, list[int]]) -> str:
 
     return base64.b64encode(hashlib.sha256(output).digest()).decode('ascii')
 
-SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE = nilql.SecretKey.generate(
+SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE = blindfold.SecretKey.generate(
   {'nodes': [{}]},
   {'sum': True}
 )
@@ -61,7 +61,7 @@ class TestAPI(TestCase):
         """
         Check that the module exports the expected classes and functions.
         """
-        module = import_module('nilql.nilql')
+        module = import_module('blindfold.blindfold')
         self.assertTrue({
             'SecretKey', 'ClusterKey', 'PublicKey',
             'encrypt', 'decrypt', 'allot', 'unify'
@@ -76,12 +76,12 @@ class TestKeys(TestCase):
         Test key generate, dump, JSONify, and load for store operation.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
-            sk = nilql.SecretKey.generate(cluster, {'store': True})
-            sk_loaded = nilql.SecretKey.load(sk.dump())
-            self.assertTrue(isinstance(sk, nilql.SecretKey))
+            sk = blindfold.SecretKey.generate(cluster, {'store': True})
+            sk_loaded = blindfold.SecretKey.load(sk.dump())
+            self.assertTrue(isinstance(sk, blindfold.SecretKey))
             self.assertEqual(sk_loaded, sk)
 
-            sk_from_json = nilql.SecretKey.load(
+            sk_from_json = blindfold.SecretKey.load(
                 json.loads(json.dumps(sk.dump()))
             )
             self.assertEqual(sk_from_json, sk)
@@ -91,12 +91,12 @@ class TestKeys(TestCase):
         Test key generate, dump, JSONify, and load for store operation.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
-            sk = nilql.SecretKey.generate(cluster, {'match': True})
-            sk_loaded = nilql.SecretKey.load(sk.dump())
-            self.assertTrue(isinstance(sk, nilql.SecretKey))
+            sk = blindfold.SecretKey.generate(cluster, {'match': True})
+            sk_loaded = blindfold.SecretKey.load(sk.dump())
+            self.assertTrue(isinstance(sk, blindfold.SecretKey))
             self.assertEqual(sk_loaded, sk)
 
-            sk_from_json = nilql.SecretKey.load(
+            sk_from_json = blindfold.SecretKey.load(
                 json.loads(json.dumps(sk.dump()))
             )
             self.assertEqual(sk_from_json, sk)
@@ -106,22 +106,22 @@ class TestKeys(TestCase):
         Test key generate, dump, JSONify, and load for store operation
         with a single node.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'sum': True})
-        sk_loaded = nilql.SecretKey.load(sk.dump())
-        self.assertTrue(isinstance(sk, nilql.SecretKey))
+        sk = blindfold.SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        sk_loaded = blindfold.SecretKey.load(sk.dump())
+        self.assertTrue(isinstance(sk, blindfold.SecretKey))
         self.assertEqual(sk_loaded, sk)
 
-        sk_from_json = nilql.SecretKey.load(
+        sk_from_json = blindfold.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
         self.assertEqual(sk_from_json, sk)
 
-        pk = nilql.PublicKey.generate(sk)
-        pk_loaded = nilql.PublicKey.load(pk.dump())
-        self.assertTrue(isinstance(pk, nilql.PublicKey))
+        pk = blindfold.PublicKey.generate(sk)
+        pk_loaded = blindfold.PublicKey.load(pk.dump())
+        self.assertTrue(isinstance(pk, blindfold.PublicKey))
         self.assertEqual(pk_loaded, pk)
 
-        pk_from_json = nilql.PublicKey.load(
+        pk_from_json = blindfold.PublicKey.load(
             json.loads(json.dumps(pk.dump()))
         )
         self.assertEqual(pk_from_json, pk)
@@ -131,12 +131,12 @@ class TestKeys(TestCase):
         Test key generate, dump, JSONify, and load for sum operation
         with multiple nodes.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
-        sk_loaded = nilql.SecretKey.load(sk.dump())
-        self.assertTrue(isinstance(sk, nilql.SecretKey))
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        sk_loaded = blindfold.SecretKey.load(sk.dump())
+        self.assertTrue(isinstance(sk, blindfold.SecretKey))
         self.assertEqual(sk_loaded, sk)
 
-        sk_from_json = nilql.SecretKey.load(
+        sk_from_json = blindfold.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
         self.assertEqual(sk_from_json, sk)
@@ -146,12 +146,12 @@ class TestKeys(TestCase):
         Test key generate, dump, JSONify, and load for sum operation
         with multiple nodes and threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
-        sk_loaded = nilql.SecretKey.load(sk.dump())
-        self.assertTrue(isinstance(sk, nilql.SecretKey))
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
+        sk_loaded = blindfold.SecretKey.load(sk.dump())
+        self.assertTrue(isinstance(sk, blindfold.SecretKey))
         self.assertEqual(sk_loaded, sk)
 
-        sk_from_json = nilql.SecretKey.load(
+        sk_from_json = blindfold.SecretKey.load(
             json.loads(json.dumps(sk.dump()))
         )
         self.assertEqual(sk_from_json, sk)
@@ -160,12 +160,12 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for store operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True}, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
@@ -175,12 +175,12 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for store operation with multiple nodes.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
@@ -190,12 +190,12 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for match operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True}, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}]}, {'match': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}]}, {'match': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}]}, {'match': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
@@ -205,12 +205,12 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for match operation with a single node.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
@@ -220,12 +220,12 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for sum operation with multiple nodes.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
@@ -236,12 +236,12 @@ class TestKeys(TestCase):
         Test key generation from seed for sum operation with multiple nodes
         and a threshold.
         """
-        sk_from_seed = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2, seed=SEED)
+        sk_from_seed = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2, seed=SEED)
         self.assertEqual(
             to_hash_base64(sk_from_seed['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
         )
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         self.assertNotEqual(
             to_hash_base64(sk['material']),
             'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='
@@ -259,25 +259,25 @@ class TestKeysError(TestCase):
             ValueError,
             match='valid cluster configuration is required'
         ):
-            nilql.SecretKey.generate(123, {'store': True})
+            blindfold.SecretKey.generate(123, {'store': True})
 
         with pytest.raises(
             ValueError,
             match='cluster configuration must contain at least one node'
         ):
-            nilql.SecretKey.generate({'nodes': []}, {'store': True})
+            blindfold.SecretKey.generate({'nodes': []}, {'store': True})
 
         with pytest.raises(
             ValueError,
             match='valid operations specification is required'
         ):
-            nilql.SecretKey.generate({'nodes': [{}]}, 123)
+            blindfold.SecretKey.generate({'nodes': [{}]}, 123)
 
         with pytest.raises(
             ValueError,
             match='secret key must support exactly one operation'
         ):
-            nilql.SecretKey.generate({'nodes': [{}]}, {})
+            blindfold.SecretKey.generate({'nodes': [{}]}, {})
 
     def test_public_key_generation_errors(self):
         """
@@ -287,8 +287,8 @@ class TestKeysError(TestCase):
             ValueError,
             match='cannot create public key for supplied secret key'
         ):
-            sk = nilql.SecretKey.generate({'nodes':[{}, {}]}, {'sum': True})
-            nilql.PublicKey.generate(sk)
+            sk = blindfold.SecretKey.generate({'nodes':[{}, {}]}, {'sum': True})
+            blindfold.PublicKey.generate(sk)
 
 class TestFunctions(TestCase):
     """
@@ -299,14 +299,14 @@ class TestFunctions(TestCase):
         Test encryption and decryption for storing.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
-            sk = nilql.SecretKey.generate(cluster, {'store': True})
+            sk = blindfold.SecretKey.generate(cluster, {'store': True})
 
             plaintext = 123
-            decrypted = nilql.decrypt(sk, nilql.encrypt(sk, plaintext))
+            decrypted = blindfold.decrypt(sk, blindfold.encrypt(sk, plaintext))
             self.assertEqual(decrypted, plaintext)
 
             plaintext = 'abc'
-            decrypted = nilql.decrypt(sk, nilql.encrypt(sk, plaintext))
+            decrypted = blindfold.decrypt(sk, blindfold.encrypt(sk, plaintext))
             self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_for_match(self):
@@ -314,12 +314,12 @@ class TestFunctions(TestCase):
         Test encryption for matching.
         """
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
-            sk = nilql.SecretKey.generate(cluster, {'match': True})
-            ciphertext_one = nilql.encrypt(sk, 123)
-            ciphertext_two = nilql.encrypt(sk, 123)
-            ciphertext_three = nilql.encrypt(sk, 'abc')
-            ciphertext_four = nilql.encrypt(sk, 'abc')
-            ciphertext_five = nilql.encrypt(sk, 'ABC')
+            sk = blindfold.SecretKey.generate(cluster, {'match': True})
+            ciphertext_one = blindfold.encrypt(sk, 123)
+            ciphertext_two = blindfold.encrypt(sk, 123)
+            ciphertext_three = blindfold.encrypt(sk, 'abc')
+            ciphertext_four = blindfold.encrypt(sk, 'abc')
+            ciphertext_five = blindfold.encrypt(sk, 'ABC')
             self.assertEqual(ciphertext_one, ciphertext_two)
             self.assertEqual(ciphertext_three, ciphertext_four)
             self.assertNotEqual(ciphertext_four, ciphertext_five)
@@ -329,20 +329,20 @@ class TestFunctions(TestCase):
         Test encryption and decryption for sum operation with a single node.
         """
         sk = SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE
-        pk = nilql.PublicKey.generate(sk)
+        pk = blindfold.PublicKey.generate(sk)
         plaintext = 123
-        ciphertext = nilql.encrypt(pk, plaintext)
-        decrypted = nilql.decrypt(sk, ciphertext)
+        ciphertext = blindfold.encrypt(pk, plaintext)
+        decrypted = blindfold.decrypt(sk, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_multiple(self):
         """
         Test encryption and decryption for sum operation with multiple nodes.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         plaintext = 123
-        ciphertext = nilql.encrypt(sk, plaintext)
-        decrypted = nilql.decrypt(sk, ciphertext)
+        ciphertext = blindfold.encrypt(sk, plaintext)
+        decrypted = blindfold.decrypt(sk, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_multiple_with_threshold(self):
@@ -350,10 +350,10 @@ class TestFunctions(TestCase):
         Test encryption and decryption for sum operation with multiple nodes
         and a threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         plaintext = 123
-        ciphertext = nilql.encrypt(sk, plaintext)
-        decrypted = nilql.decrypt(sk, ciphertext)
+        ciphertext = blindfold.encrypt(sk, plaintext)
+        decrypted = blindfold.decrypt(sk, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_with_one_failure_multiple_with_threshold(self):
@@ -361,10 +361,10 @@ class TestFunctions(TestCase):
         Test encryption and decryption for sum operation with multiple nodes
         and a threshold.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
         plaintext = 123
-        ciphertext = nilql.encrypt(sk, plaintext)
-        decrypted = nilql.decrypt(sk, ciphertext[1:])
+        ciphertext = blindfold.encrypt(sk, plaintext)
+        decrypted = blindfold.decrypt(sk, ciphertext[1:])
         self.assertEqual(decrypted, plaintext)
 
 class TestCiphertextRepresentations(TestCase):
@@ -377,10 +377,10 @@ class TestCiphertextRepresentations(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'store': True}
-        ck = nilql.ClusterKey.generate(cluster, operations)
+        ck = blindfold.ClusterKey.generate(cluster, operations)
         plaintext = 'abc'
         ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
-        decrypted = nilql.decrypt(ck, ciphertext)
+        decrypted = blindfold.decrypt(ck, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
     def test_ciphertext_representation_for_sum_with_multiple_nodes(self):
@@ -389,10 +389,10 @@ class TestCiphertextRepresentations(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'sum': True}
-        ck = nilql.ClusterKey.generate(cluster, operations)
+        ck = blindfold.ClusterKey.generate(cluster, operations)
         plaintext = 123
         ciphertext = [456, 246, 4294967296 + 15 - 123 - 456]
-        decrypted = nilql.decrypt(ck, ciphertext)
+        decrypted = blindfold.decrypt(ck, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
     def test_ciphertext_representation_for_sum_with_multiple_nodes_and_threshold(self):
@@ -401,10 +401,10 @@ class TestCiphertextRepresentations(TestCase):
         """
         cluster = {'nodes': [{}, {}, {}]}
         operations = {'sum': True}
-        ck = nilql.ClusterKey.generate(cluster, operations, threshold=2)
+        ck = blindfold.ClusterKey.generate(cluster, operations, threshold=2)
         plaintext = 123
         ciphertext = [[1, 1382717699], [2, 2765435275], [3, 4148152851]]
-        decrypted = nilql.decrypt(ck, ciphertext)
+        decrypted = blindfold.decrypt(ck, ciphertext)
         self.assertEqual(decrypted, plaintext)
 
 class TestFunctionsErrors(TestCase):
@@ -421,9 +421,9 @@ class TestFunctionsErrors(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'store': True}
-            sk = nilql.SecretKey.generate(cluster, operations)
+            sk = blindfold.SecretKey.generate(cluster, operations)
             plaintext = 2 ** 32
-            nilql.encrypt(sk, plaintext)
+            blindfold.encrypt(sk, plaintext)
 
     def test_encrypt_of_str_for_store_error(self):
         """
@@ -435,9 +435,9 @@ class TestFunctionsErrors(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'store': True}
-            sk = nilql.SecretKey.generate(cluster, operations)
+            sk = blindfold.SecretKey.generate(cluster, operations)
             plaintext = 'X' * 4097
-            nilql.encrypt(sk, plaintext)
+            blindfold.encrypt(sk, plaintext)
 
     def test_encrypt_of_int_for_match_error(self):
         """
@@ -449,9 +449,9 @@ class TestFunctionsErrors(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
-            sk = nilql.SecretKey.generate(cluster, operations)
+            sk = blindfold.SecretKey.generate(cluster, operations)
             plaintext = 2 ** 32
-            nilql.encrypt(sk, plaintext)
+            blindfold.encrypt(sk, plaintext)
 
     def test_encrypt_of_str_for_match_error(self):
         """
@@ -463,9 +463,9 @@ class TestFunctionsErrors(TestCase):
         ):
             cluster = {'nodes': [{}]}
             operations = {'match': True}
-            sk = nilql.SecretKey.generate(cluster, operations)
+            sk = blindfold.SecretKey.generate(cluster, operations)
             plaintext = 'X' * 4097
-            nilql.encrypt(sk, plaintext)
+            blindfold.encrypt(sk, plaintext)
 
     def test_encrypt_of_int_for_sum_error(self):
         """
@@ -476,45 +476,45 @@ class TestFunctionsErrors(TestCase):
                 TypeError,
                 match='plaintext to encrypt for sum operation must be an integer'
             ):
-                sk = nilql.SecretKey.generate(cluster, {'sum': True})
-                ek = nilql.PublicKey.generate(sk) if len(cluster['nodes']) == 1 else sk
-                nilql.encrypt(ek, 'abc')
+                sk = blindfold.SecretKey.generate(cluster, {'sum': True})
+                ek = blindfold.PublicKey.generate(sk) if len(cluster['nodes']) == 1 else sk
+                blindfold.encrypt(ek, 'abc')
 
             with pytest.raises(
                 ValueError,
                 match='numeric plaintext must be a valid 32-bit signed integer'
             ):
-                sk = nilql.SecretKey.generate(cluster, {'sum': True})
-                ek = nilql.PublicKey.generate(sk) if len(cluster['nodes']) == 1 else sk
-                nilql.encrypt(ek, 2 ** 32)
+                sk = blindfold.SecretKey.generate(cluster, {'sum': True})
+                ek = blindfold.PublicKey.generate(sk) if len(cluster['nodes']) == 1 else sk
+                blindfold.encrypt(ek, 2 ** 32)
 
     def test_decrypt_for_store_cluster_size_mismatch_error(self):
         """
         Test errors in decryption for store operation due to cluster size mismatch.
         """
-        sk_one = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
-        sk_two = nilql.SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
-        sk_three = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
-        ciphertext_one = nilql.encrypt(sk_one, 123)
-        ciphertext_two = nilql.encrypt(sk_two, 123)
+        sk_one = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True})
+        sk_two = blindfold.SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+        sk_three = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True})
+        ciphertext_one = blindfold.encrypt(sk_one, 123)
+        ciphertext_two = blindfold.encrypt(sk_two, 123)
 
         with pytest.raises(
             ValueError,
             match='secret key requires a valid ciphertext from a single-node cluster'
         ):
-            nilql.decrypt(sk_one, ciphertext_two)
+            blindfold.decrypt(sk_one, ciphertext_two)
 
         with pytest.raises(
             ValueError,
             match='secret key requires a valid ciphertext from a multiple-node cluster'
         ):
-            nilql.decrypt(sk_two, ciphertext_one)
+            blindfold.decrypt(sk_two, ciphertext_one)
 
         with pytest.raises(
             ValueError,
             match='ciphertext must have enough shares for cluster size or threshold'
         ):
-            nilql.decrypt(sk_three, ciphertext_two)
+            blindfold.decrypt(sk_three, ciphertext_two)
 
     def test_decrypt_for_store_key_mismatch_error(self):
         """
@@ -524,11 +524,11 @@ class TestFunctionsErrors(TestCase):
             ValueError,
             match='cannot decrypt the supplied ciphertext using the supplied key'
         ):
-            sk = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
-            sk_alt = nilql.SecretKey.generate({'nodes': [{}]}, {'store': True})
+            sk = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True})
+            sk_alt = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True})
             plaintext = 123
-            ciphertext = nilql.encrypt(sk, plaintext)
-            nilql.decrypt(sk_alt, ciphertext)
+            ciphertext = blindfold.encrypt(sk, plaintext)
+            blindfold.decrypt(sk_alt, ciphertext)
 
 class TestSecureComputations(TestCase):
     """
@@ -538,16 +538,16 @@ class TestSecureComputations(TestCase):
         """
         Test secure summation workflow for a cluster that has multiple nodes.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
-        (a0, b0, c0) = nilql.encrypt(sk, 123)
-        (a1, b1, c1) = nilql.encrypt(sk, 456)
-        (a2, b2, c2) = nilql.encrypt(sk, 789)
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+        (a0, b0, c0) = blindfold.encrypt(sk, 123)
+        (a1, b1, c1) = blindfold.encrypt(sk, 456)
+        (a2, b2, c2) = blindfold.encrypt(sk, 789)
         (a3, b3, c3) = (
             (a0 + a1 + a2) % (2 ** 32 + 15),
             (b0 + b1 + b2) % (2 ** 32 + 15),
             (c0 + c1 + c2) % (2 ** 32 + 15)
         )
-        decrypted = nilql.decrypt(sk, [a3, b3, c3])
+        decrypted = blindfold.decrypt(sk, [a3, b3, c3])
         self.assertEqual(decrypted, 123 + 456 + 789)
 
     def test_workflow_for_secure_sum_with_multiple_nodes_and_threshold(self):
@@ -555,13 +555,13 @@ class TestSecureComputations(TestCase):
         Test secure summation workflow with a threshold for a cluster that has
         multiple nodes.
         """
-        sk = nilql.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
-        (a0, b0, c0) = nilql.encrypt(sk, 123)
-        (a1, b1, c1) = nilql.encrypt(sk, 456)
-        (a2, b2, c2) = nilql.encrypt(sk, 789)
+        sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
+        (a0, b0, c0) = blindfold.encrypt(sk, 123)
+        (a1, b1, c1) = blindfold.encrypt(sk, 456)
+        (a2, b2, c2) = blindfold.encrypt(sk, 789)
         (a3, b3, c3) = _shamirs_add(
             _shamirs_add([a0, b0, c0], [a1, b1, c1]),
             [a2, b2, c2]
         )
-        decrypted = nilql.decrypt(sk, [a3, b3, c3])
+        decrypted = blindfold.decrypt(sk, [a3, b3, c3])
         self.assertEqual(decrypted, 123 + 456 + 789)

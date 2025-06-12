@@ -1,9 +1,9 @@
 import json
 from unittest import TestCase
 
-import nilql
+import blindfold
 
-CLUSTER_KEY_FOR_STORE_WITH_THREE_NODES = nilql.ClusterKey.generate(
+CLUSTER_KEY_FOR_STORE_WITH_THREE_NODES = blindfold.ClusterKey.generate(
     {"nodes": [{}] * 3}, {"store": True}
 )
 
@@ -29,14 +29,14 @@ class TestUtils(TestCase):
         """
         Check that the module properly restructures the inputs
         """
-        allot_split_for_N_nodes = nilql.allot(cluster_encrypted_data)
+        allot_split_for_N_nodes = blindfold.allot(cluster_encrypted_data)
         self.assertEqual(allot_split_for_N_nodes, expected_allot_split)
 
     def test_unify(self):
         """
         Check that the module properly restores the shares
         """
-        decrypted = nilql.unify(
+        decrypted = blindfold.unify(
             CLUSTER_KEY_FOR_STORE_WITH_THREE_NODES,
             shares_from_nildb["85ce66f5-9049-47cc-a81b-403cd6b49227"],
         )
