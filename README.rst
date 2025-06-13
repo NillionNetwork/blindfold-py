@@ -53,7 +53,7 @@ The library supports two categories of keys:
 
 1. ``SecretKey``: Keys in this category support operations within a single node or across multiple nodes. These contain cryptographic material for encryption, decryption, and other operations. Notably, a ``SecretKey`` instance includes blinding masks that a client need not share with the cluster. By using ``SecretKey`` instances a client can retain exclusive access to its data *even if all servers in a cluster collude*. 
 
-2. ``ClusterKey``: Keys in this category represent cluster configurations but do not contain cryptographic material. These can be used for managing multiple-node clusters. Unlike ``SecretKey`` instances, ``ClusterKey`` instances do not incorporate blinding masks. This means each node in a cluster has access to a raw secret share of encrypted data.
+2. ``ClusterKey``: Keys in this category represent cluster configurations but do not contain cryptographic material. These can be used only when working with multiple-node clusters. Unlike ``SecretKey`` instances, ``ClusterKey`` instances do not incorporate blinding masks. This means each node in a cluster has access to a raw secret share of the encrypted data and, therefore, the data is only protected if the nodes in the cluster do not collude.
 
 Threshold secret sharing is supported when encrypting in a summation-compatible way for multiple-node clusters. A threshold specifies the minimum number of nodes required to reconstruct the original data. Shamir's secret sharing is employed when encrypting with a threshold value, ensuring that encrypted data can only be decrypted if the required number of shares is available.
 
@@ -73,39 +73,38 @@ The example below generates a ``SecretKey`` instance for a single-node cluster:
 
 .. code-block:: python
 
-    from blindfold import SecretKey
-
     cluster = {'nodes': [{}]}
-    secret_key = SecretKey.generate(cluster, {'store': True})
+    secret_key = blindfold.SecretKey.generate(cluster, {'store': True})
 
 The example below generates a ``SecretKey`` instance for a multiple-node (*i.e.*, three-node) cluster with a two-share decryption threshold:
 
 .. code-block:: python
 
     cluster = {'nodes': [{}, {}, {}]}
-    secret_key = SecretKey.generate(cluster, {'sum': True}, threshold=2)
+    secret_key = blindfold.SecretKey.generate(cluster, {'sum': True}, threshold=2)
 
 Example: Encrypting and Decrypting Data
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The below example encrypts and decrypts an integer:
-
-.. code-block:: python
-
-    plaintext = 123
-    ciphertext = blindfold.encrypt(secret_key, plaintext)
-    decrypted = blindfold.decrypt(secret_key, ciphertext)
-    assert plaintext == decrypted
 
 The below example encrypts and decrypts a string:
 
 .. code-block:: python
 
-    plaintext = "hello"
+    secret_key = blindfold.SecretKey.generate({'nodes': [{}]}, {'store': True})
+    plaintext = "abc"
     ciphertext = blindfold.encrypt(secret_key, plaintext)
     decrypted = blindfold.decrypt(secret_key, ciphertext)
     assert plaintext == decrypted
 
+The below example encrypts and decrypts an integer:
+
+.. code-block:: python
+
+    secret_key = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+    plaintext = 123
+    ciphertext = blindfold.encrypt(secret_key, plaintext)
+    decrypted = blindfold.decrypt(secret_key, ciphertext)
+    assert plaintext == decrypted
 
 Development
 -----------
