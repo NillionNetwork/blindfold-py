@@ -1,6 +1,6 @@
 [project]
 name = "blindfold"
-version = "0.0.0a14"
+version = "0.1.0rc0"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
 readme = "README.rst"
