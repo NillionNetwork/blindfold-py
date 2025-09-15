@@ -1,6 +1,6 @@
 [project]
 name = "blindfold"
-version = "0.1.0rc0"
+version = "0.1.0"
 description = "Library for working with encrypted data within nilDB queries and replies."
 license = {text = "MIT"}
 readme = "README.rst"
@@ -13,6 +13,7 @@ dependencies = [
 
 [project.urls]
 Repository = "https://github.com/nillionnetwork/blindfold-py"
+Documentation = "https://blindfold.readthedocs.io"
 
 [project.optional-dependencies]
 docs = [
