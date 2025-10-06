@@ -1,7 +1,7 @@
 """
 Test suite containing functional unit tests of exported functions.
 """
-from typing import Union
+from typing import Union, Sequence
 from unittest import TestCase
 from importlib import import_module
 import functools
@@ -17,14 +17,36 @@ blindfold.SecretKey._paillier_key_length = 256 # pylint: disable=protected-acces
 
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 
-def _shamirs_add(shares1, shares2, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
+def _shamirs_add(
+        shares_a: Sequence[Sequence[int]],
+        shares_b: Sequence[Sequence[int]],
+        prime: int
+    ) -> Sequence[Sequence[int]]:
     """
-    Adds two sets of shares pointwise, assuming they use the same x-values.
+    Adds two sets of shares componentwise, assuming they use the same indices.
+
+    >>> prime = _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (1, 456)], prime)
+    [[0, 246], [1, 912]]
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123)], prime)
+    Traceback (most recent call last):
+      ...
+    ValueError: sequences of shares must have the same length
+    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (2, 456)], prime)
+    Traceback (most recent call last):
+      ...
+    ValueError: shares in each sequence must have the same indices
     """
+    if len(shares_a) != len(shares_b):
+        raise ValueError('sequences of shares must have the same length')
+
+    if [i for (i, _) in shares_a] != [i for (i, _) in shares_b]:
+        raise ValueError('shares in each sequence must have the same indices')
+
     return [
-        [x1, (y1 + y2) % prime]
-        for (x1, y1), (x2, y2) in zip(shares1, shares2)
-        if x1 == x2
+        [i, (v + w) % prime]
+        for (i, v), (j, w) in zip(shares_a, shares_b)
+        if i == j
     ]
 
 def to_hash_base64(output: Union[bytes, list[int]]) -> str:
@@ -560,8 +582,13 @@ class TestSecureComputations(TestCase):
         (a1, b1, c1) = blindfold.encrypt(sk, 456)
         (a2, b2, c2) = blindfold.encrypt(sk, 789)
         (a3, b3, c3) = _shamirs_add(
-            _shamirs_add([a0, b0, c0], [a1, b1, c1]),
-            [a2, b2, c2]
+            _shamirs_add(
+                [a0, b0, c0],
+                [a1, b1, c1],
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            ),
+            [a2, b2, c2],
+            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
         )
         decrypted = blindfold.decrypt(sk, [a3, b3, c3])
         self.assertEqual(decrypted, 123 + 456 + 789)
