@@ -16,14 +16,14 @@ import pailliers
 _PAILLIER_KEY_LENGTH = 2048
 """Length in bits of Paillier keys."""
 
-_PLAINTEXT_SIGNED_INTEGER_MIN = -2147483648
-"""Minimum plaintext 32-bit signed integer value that can be encrypted."""
-
-_PLAINTEXT_SIGNED_INTEGER_MAX = 2147483647
-"""Maximum plaintext 32-bit signed integer value that can be encrypted."""
-
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 """Modulus to use for secret sharing of 32-bit signed integers."""
+
+_PLAINTEXT_SIGNED_INTEGER_MIN = -(2 ** 31)
+"""Minimum plaintext 32-bit signed integer value that can be encrypted."""
+
+_PLAINTEXT_SIGNED_INTEGER_MAX = (2 ** 31) - 1
+"""Maximum plaintext 32-bit signed integer value that can be encrypted."""
 
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
@@ -417,6 +417,49 @@ for single-node clusters
                 ]
 
         return secret_key
+
+    def _modulus(self: SecretKey) -> int:
+        """
+        Return the modulus governing the domain of plaintexts of the Paillier,
+        additive, or Shamir's scheme corresponding to this key instance.
+
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> isinstance(sk._modulus(), int)
+        True
+        >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
+        >>> isinstance(sk._modulus(), int)
+        True
+        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, 2)
+        >>> isinstance(sk._modulus(), int)
+        True
+
+        If the scheme associated with a key instance has no modulus, an
+        exception is raised.
+
+        >>> SecretKey.generate({'nodes': [{}]}, {'store': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        >>> SecretKey.generate({'nodes': [{}, {}]}, {'store': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        >>> SecretKey.generate({'nodes': [{}]}, {'match': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        """
+        if isinstance(self.get('threshold'), int):
+            return _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+
+        if self.get('operations').get('sum'):
+            return (
+                self.get('material')[2]
+                if len(self['cluster']['nodes']) == 1 else
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+
+        raise ValueError('scheme associated with key has no modulus')
 
     def dump(self: SecretKey) -> dict:
         """
@@ -958,15 +1001,8 @@ def decrypt(
                 pailliers.cipher(int(ciphertext, 16))
             )
 
-            # Field elements in the "upper half" of the field used in the Paillier
-            # scheme represent negative integers.
-            if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-                plaintext -= key['material'][2] # Third key material component is modulus.
-
-            return plaintext
-
         # For multiple-node clusters and no threshold, additive secret sharing is used.
-        if 'threshold' not in key:
+        elif 'threshold' not in key:
             inverse_masks = [
                 pow(
                     key['material'][i] if 'material' in key else 1,
@@ -1004,10 +1040,10 @@ def decrypt(
             ]
             plaintext = _shamirs_recover(shares, _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
 
-        # Field elements in the "upper half" of the field used for the additive and
-        # Shamir's secret sharing schemes represent negative integers.
+        # Field elements in the "upper half" of the fields used for the Paillier,
+        # additive and Shamir's schemes represent negative integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-            plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            plaintext -= key._modulus() # pylint: disable=protected-access
 
         return plaintext
 

@@ -10,12 +10,11 @@ import base64
 import hashlib
 import pytest
 
+import pailliers
 import blindfold
 
 # Modify the Paillier secret key length to reduce running time of tests.
 blindfold.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
-
-_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
 
 def _shamirs_add(
         shares_a: Sequence[Sequence[int]],
@@ -25,7 +24,7 @@ def _shamirs_add(
     """
     Adds two sets of shares componentwise, assuming they use the same indices.
 
-    >>> prime = _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+    >>> prime = 1009
     >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (1, 456)], prime)
     [[0, 246], [1, 912]]
     >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123)], prime)
@@ -556,20 +555,40 @@ class TestSecureComputations(TestCase):
     """
     Tests consisting of end-to-end workflows involving secure computation.
     """
+    # pylint: disable=protected-access # To access ``SecretKey._modulus`` method.
+    def test_workflow_for_secure_sum_with_single_node(self):
+        """
+        Test secure summation workflow for a cluster that has a single node.
+        """
+        sk = blindfold.SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        pk = blindfold.PublicKey.generate(sk)
+
+        # Ciphertexts are always represented as hexadecimal strings
+        # for portability.
+        a = pailliers.cipher(int(blindfold.encrypt(pk, 123), 16))
+        b = pailliers.cipher(int(blindfold.encrypt(pk, 456), 16))
+        c = pailliers.cipher(int(blindfold.encrypt(pk, 789), 16))
+        r = hex(pailliers.add(pk['material'], a, b, c))
+
+        decrypted = blindfold.decrypt(sk, r)
+        self.assertEqual(decrypted, 123 + 456 + 789)
+
     def test_workflow_for_secure_sum_with_multiple_nodes(self):
         """
         Test secure summation workflow for a cluster that has multiple nodes.
         """
         sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
-        (a0, b0, c0) = blindfold.encrypt(sk, 123)
-        (a1, b1, c1) = blindfold.encrypt(sk, 456)
-        (a2, b2, c2) = blindfold.encrypt(sk, 789)
-        (a3, b3, c3) = (
-            (a0 + a1 + a2) % (2 ** 32 + 15),
-            (b0 + b1 + b2) % (2 ** 32 + 15),
-            (c0 + c1 + c2) % (2 ** 32 + 15)
+
+        (a0, a1, a2) = blindfold.encrypt(sk, 123)
+        (b0, b1, b2) = blindfold.encrypt(sk, 456)
+        (c0, c1, c2) = blindfold.encrypt(sk, 789)
+        (r0, r1, r2) = (
+            (a0 + b0 + c0) % sk._modulus(),
+            (a1 + b1 + c1) % sk._modulus(),
+            (a2 + b2 + c2) % sk._modulus()
         )
-        decrypted = blindfold.decrypt(sk, [a3, b3, c3])
+
+        decrypted = blindfold.decrypt(sk, [r0, r1, r2])
         self.assertEqual(decrypted, 123 + 456 + 789)
 
     def test_workflow_for_secure_sum_with_multiple_nodes_and_threshold(self):
@@ -578,17 +597,19 @@ class TestSecureComputations(TestCase):
         multiple nodes.
         """
         sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
-        (a0, b0, c0) = blindfold.encrypt(sk, 123)
-        (a1, b1, c1) = blindfold.encrypt(sk, 456)
-        (a2, b2, c2) = blindfold.encrypt(sk, 789)
-        (a3, b3, c3) = _shamirs_add(
+
+        (a0, a1, a2) = blindfold.encrypt(sk, 123)
+        (b0, b1, b2) = blindfold.encrypt(sk, 456)
+        (c0, c1, c2) = blindfold.encrypt(sk, 789)
+        (r0, r1, r2) = _shamirs_add(
             _shamirs_add(
-                [a0, b0, c0],
-                [a1, b1, c1],
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                [a0, a1, a2],
+                [b0, b1, b2],
+                sk._modulus()
             ),
-            [a2, b2, c2],
-            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            [c0, c1, c2],
+            sk._modulus()
         )
-        decrypted = blindfold.decrypt(sk, [a3, b3, c3])
+
+        decrypted = blindfold.decrypt(sk, [r0, r1, r2])
         self.assertEqual(decrypted, 123 + 456 + 789)
