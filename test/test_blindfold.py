@@ -323,9 +323,9 @@ class TestFunctions(TestCase):
         for cluster in [{'nodes': [{}]}, {'nodes': [{}, {}, {}]}]:
             sk = blindfold.SecretKey.generate(cluster, {'store': True})
 
-            plaintext = 123
-            decrypted = blindfold.decrypt(sk, blindfold.encrypt(sk, plaintext))
-            self.assertEqual(decrypted, plaintext)
+            for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+                decrypted = blindfold.decrypt(sk, blindfold.encrypt(sk, plaintext))
+                self.assertEqual(decrypted, plaintext)
 
             plaintext = 'abc'
             decrypted = blindfold.decrypt(sk, blindfold.encrypt(sk, plaintext))
@@ -352,20 +352,20 @@ class TestFunctions(TestCase):
         """
         sk = SECRET_KEY_FOR_SUM_WITH_SINGLE_NODE
         pk = blindfold.PublicKey.generate(sk)
-        plaintext = 123
-        ciphertext = blindfold.encrypt(pk, plaintext)
-        decrypted = blindfold.decrypt(sk, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+            ciphertext = blindfold.encrypt(pk, plaintext)
+            decrypted = blindfold.decrypt(sk, ciphertext)
+            self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_multiple(self):
         """
         Test encryption and decryption for sum operation with multiple nodes.
         """
         sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
-        plaintext = 123
-        ciphertext = blindfold.encrypt(sk, plaintext)
-        decrypted = blindfold.decrypt(sk, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+            ciphertext = blindfold.encrypt(sk, plaintext)
+            decrypted = blindfold.decrypt(sk, ciphertext)
+            self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_multiple_with_threshold(self):
         """
@@ -373,10 +373,10 @@ class TestFunctions(TestCase):
         and a threshold.
         """
         sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
-        plaintext = 123
-        ciphertext = blindfold.encrypt(sk, plaintext)
-        decrypted = blindfold.decrypt(sk, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+            ciphertext = blindfold.encrypt(sk, plaintext)
+            decrypted = blindfold.decrypt(sk, ciphertext)
+            self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_decrypt_of_int_for_sum_with_one_failure_multiple_with_threshold(self):
         """
@@ -384,10 +384,10 @@ class TestFunctions(TestCase):
         and a threshold.
         """
         sk = blindfold.SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, threshold=2)
-        plaintext = 123
-        ciphertext = blindfold.encrypt(sk, plaintext)
-        decrypted = blindfold.decrypt(sk, ciphertext[1:])
-        self.assertEqual(decrypted, plaintext)
+        for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+            ciphertext = blindfold.encrypt(sk, plaintext)
+            decrypted = blindfold.decrypt(sk, ciphertext[1:])
+            self.assertEqual(decrypted, plaintext)
 
 class TestCiphertextRepresentations(TestCase):
     """

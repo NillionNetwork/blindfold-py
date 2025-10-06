@@ -707,7 +707,7 @@ def encrypt(
         # Only 32-bit signed integer plaintexts are supported.
         if (
             plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
-            plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX
+            plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX
         ):
             raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
@@ -953,10 +953,17 @@ def decrypt(
     if key['operations'].get('sum'):
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
-            return pailliers.decrypt(
+            plaintext = pailliers.decrypt(
                 key['material'],
                 pailliers.cipher(int(ciphertext, 16))
             )
+
+            # Field elements in the "upper half" of the field used in the Paillier
+            # scheme represent negative integers.
+            if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
+                plaintext -= key['material'][2] # Third key material component is modulus.
+
+            return plaintext
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
         if 'threshold' not in key:
@@ -976,31 +983,29 @@ def decrypt(
                     ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
                 ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-            # Field elements in the "upper half" of the field represent negative
-            # integers.
-            if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-                plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-
-            return plaintext
-
         # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
-        inverse_masks = [
-            pow(
-                key['material'][i] if 'material' in key else 1,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-            )
-            for i in range(len(key['cluster']['nodes']))
-        ]
-        shares = ciphertext
-        for (i, share) in enumerate(shares):
-            share[1] = (
-                inverse_masks[share[0] - 1] * shares[i][1]
-            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        plaintext = _shamirs_recover(shares, _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+        else:
+            inverse_masks = [
+                pow(
+                    key['material'][i] if 'material' in key else 1,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                for i in range(len(key['cluster']['nodes']))
+            ]
+            shares = [
+                (
+                    share[0],
+                    (
+                        inverse_masks[share[0] - 1] * share[1]
+                    ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                for (i, share) in enumerate(ciphertext)
+            ]
+            plaintext = _shamirs_recover(shares, _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
 
-        # Field elements in the "upper half" of the field represent negative
-        # integers.
+        # Field elements in the "upper half" of the field used for the additive and
+        # Shamir's secret sharing schemes represent negative integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
             plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
