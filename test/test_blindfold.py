@@ -97,6 +97,10 @@ class TestKeys(TestCase):
         for (Key, cluster_, threshold) in [
             (blindfold.SecretKey, cluster(1), None),
             (blindfold.SecretKey, cluster(3), None),
+            (blindfold.SecretKey, cluster(3), 1),
+            (blindfold.SecretKey, cluster(3), 2),
+            (blindfold.ClusterKey, cluster(3), None),
+            (blindfold.ClusterKey, cluster(3), 1),
             (blindfold.ClusterKey, cluster(3), 2)
         ]:
             key = Key.generate(cluster_, {'store': True}, threshold)
@@ -171,7 +175,9 @@ class TestKeys(TestCase):
         """
         for (cluster_, threshold) in [
             (cluster(1), None),
-            (cluster(3), 2)
+            (cluster(3), 1),
+            (cluster(3), 2),
+            (cluster(3), 3)
         ]:
             sk_from_seed = blindfold.SecretKey.generate(
                 cluster_,
@@ -214,7 +220,7 @@ class TestKeys(TestCase):
         Test key generation from seed for the sum operation with multiple
         (without/with a threshold) nodes.
         """
-        for threshold in [None, 2]:
+        for threshold in [None, 1, 2, 3]:
             sk_from_seed = blindfold.SecretKey.generate(
                 cluster(3),
                 {'sum': True},
@@ -269,13 +275,13 @@ class TestKeysError(TestCase):
 
             with pytest.raises(
                 ValueError,
-                match='threshold must a positive integer not larger than the cluster size'
+                match='threshold must be a positive integer not larger than the cluster size'
             ):
                 Key.generate(cluster(2), {'store': True}, threshold=0)
 
             with pytest.raises(
                 ValueError,
-                match='threshold must a positive integer not larger than the cluster size'
+                match='threshold must be a positive integer not larger than the cluster size'
             ):
                 Key.generate(cluster(2), {'store': True}, threshold=3)
 
@@ -316,14 +322,18 @@ class TestFunctions(TestCase):
             (cluster(3), None, [{0, 1, 2}]),
 
             # Scenarios with thresholds but no missing shares.
+            (cluster(3), 1, [{0, 1, 2}]),
             (cluster(3), 2, [{0, 1, 2}]),
             (cluster(3), 3, [{0, 1, 2}]),
 
             # Scenarios with thresholds and missing shares.
+            (cluster(3), 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
             (cluster(3), 2, [{1, 2}, {0, 1}, {0, 2}]),
-            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}]),
+            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
             (cluster(4), 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
-            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}])
+            (cluster(5), 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
+            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
+            (cluster(5), 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
         ]:
             for Key in ( # Test cluster keys only for multiple-node clusters.
                 [blindfold.SecretKey] +
@@ -381,15 +391,17 @@ class TestFunctions(TestCase):
             (cluster(3), None, [{0, 1, 2}]),
 
             # Scenarios with thresholds but no missing shares.
+            (cluster(3), 1, [{0, 1, 2}]),
             (cluster(3), 2, [{0, 1, 2}]),
             (cluster(3), 3, [{0, 1, 2}]),
 
             # Scenarios with thresholds and missing shares.
+            (cluster(3), 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
             (cluster(3), 2, [{0, 1}, {1, 2}, {0, 2}]),
-            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}]),
+            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
             (cluster(4), 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
             (cluster(5), 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
-            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}]),
+            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
             (cluster(5), 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
         ]:
             for Key in [

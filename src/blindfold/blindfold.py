@@ -314,13 +314,11 @@ class SecretKey(dict):
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=-1)
         Traceback (most recent call last):
           ...
-        ValueError: threshold must a positive integer not larger than the cluster size
+        ValueError: threshold must be a positive integer not larger than the cluster size
         >>> SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=3)
         Traceback (most recent call last):
           ...
-        ValueError: threshold must a positive integer not larger than the cluster size
-        
-        
+        ValueError: threshold must be a positive integer not larger than the cluster size
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, seed=bytes([123]))
         Traceback (most recent call last):
           ...
@@ -370,7 +368,7 @@ for single-node clusters
                 raise TypeError('threshold must be an integer')
             if threshold < 1 or threshold > cluster_size:
                 raise ValueError(
-                    'threshold must a positive integer not larger than the cluster size'
+                    'threshold must be a positive integer not larger than the cluster size'
                 )
             if cluster_size == 1:
                 raise ValueError(
@@ -716,8 +714,23 @@ def encrypt(
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
 
-    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
-    >>> isinstance(encrypt(key, 123), str)
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
+    >>> len(encrypt(sk, 'abc'))
+    60
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'match': True}, seed='xyz')
+    >>> encrypt(sk, 'abc')[:70]
+    'Y3V9Nm4o3F5cTEy+oy3utP19m8XA1eMQ2zFfQiEdGpkE92g4X7eXy4T1yH4u1aBtw0FUs0'
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+    >>> pk = PublicKey.generate(sk)
+    >>> isinstance(encrypt(pk, 123), str)
+    True
+    >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+    >>> shares = encrypt(sk, 'abc')
+    >>> len(shares) == 2 and all(isinstance(share, str) for share in shares)
+    True
+    >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+    >>> shares = encrypt(ck, 123)
+    >>> len(shares) == 3 and all(isinstance(share, int) for share in shares)
     True
 
     Invocations that involve invalid argument values or types may raise an
@@ -943,6 +956,42 @@ def decrypt(
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, -10))
     -10
+
+    A decryption threshold of ``1`` **is permitted** in order to accommodate
+    seamlessly scenarios in which it may be useful to replicate plaintext or
+    encrypted data across nodes (such as for redundancy).
+    
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> decrypt(key, encrypt(key, 123)[:1])
+    123
+    >>> decrypt(key, encrypt(key, 123)[1:2])
+    123
+    >>> decrypt(key, encrypt(key, 123)[2:])
+    123
+
+    However, the use of a threshold of ``1``  incurs the same representation
+    size overheads (compared to simply keeping copies of the same data on
+    different nodes) as the use of larger threshold values. For example, note
+    below that ``80`` > ``68`` and that ``28`` > ``8``.
+
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
+    >>> len(encrypt(key, 123))
+    68
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> len(encrypt(key, 123)[0])
+    80
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=3)
+    >>> len(encrypt(key, 123)[0])
+    80
+    >>> import base64
+    >>> len(base64.b64encode(int(123).to_bytes(4, 'little')))
+    8
+    >>> key = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> len(encrypt(key, 123)[0])
+    28
+    >>> key = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=3)
+    >>> len(encrypt(key, 123)[0])
+    28
 
     An exception is raised if a ciphertext cannot be decrypted using the
     supplied key (*e.g.*, because one or both are malformed or they are
