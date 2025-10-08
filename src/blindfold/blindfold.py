@@ -9,6 +9,7 @@ import base64
 import secrets
 import hashlib
 import hmac
+from parts import parts
 from lagrange import lagrange
 import bcl
 import pailliers
@@ -305,7 +306,7 @@ class SecretKey(dict):
         >>> SecretKey.generate({'nodes': [{}, {}]}, {'match': True}, threshold=1)
         Traceback (most recent call last):
           ...
-        ValueError: thresholds are only supported for the sum operation
+        ValueError: thresholds are only supported for the store and sum operations
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=1)
         Traceback (most recent call last):
           ...
@@ -375,9 +376,12 @@ for single-node clusters
                 raise ValueError(
                     'thresholds are only supported for multiple-node clusters'
                 )
-            if not secret_key['operations'].get('sum'):
+            if (
+                not secret_key['operations'].get('store') and
+                not secret_key['operations'].get('sum')
+            ):
                 raise ValueError(
-                    'thresholds are only supported for the sum operation'
+                    'thresholds are only supported for the store and sum operations'
                 )
 
         if secret_key['operations'].get('store'):
@@ -423,6 +427,9 @@ for single-node clusters
         Return the modulus governing the domain of plaintexts of the Paillier,
         additive, or Shamir's scheme corresponding to this key instance.
 
+        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, 2)
+        >>> isinstance(sk._modulus(), int)
+        True
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(sk._modulus(), int)
         True
@@ -765,22 +772,65 @@ def encrypt(
                 bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
 
-        # For multiple-node clusters, the ciphertext is secret-shared using XOR
-        # (with each share symmetrically encrypted in the case of a secret key).
+        # For multiple-node clusters, the data or secret shares of the data might
+        # or might not be encrypted by a symmetric key (depending on the supplied
+        # key's parameters).
         optional_enc = (
             (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
             if 'material' in key else
             (lambda s: s)
         )
-        shares = []
-        aggregate = bytes(len(buffer))
-        for _ in range(len(key['cluster']['nodes']) - 1):
-            mask = _random_bytes(len(buffer))
-            aggregate = _xor(aggregate, mask)
-            shares.append(optional_enc(mask))
 
-        shares.append(optional_enc(_xor(aggregate, buffer)))
-        return list(map(_pack, shares))
+        # For multiple-node clusters and no threshold, the plaintext is secret-shared
+        # using XOR (with each share symmetrically encrypted in the case of a secret
+        # key).
+        if 'threshold' not in key:
+            shares = []
+            aggregate = bytes(len(buffer))
+            for _ in range(len(key['cluster']['nodes']) - 1):
+                mask = _random_bytes(len(buffer))
+                aggregate = _xor(aggregate, mask)
+                shares.append(optional_enc(mask))
+            shares.append(optional_enc(_xor(aggregate, buffer)))
+            return list(map(_pack, shares))
+
+        # For multiple-node clusters and a threshold, the plaintext is secret-shared
+        # using Shamir's secret sharing (with each share symmetrically encrypted in
+        # the case of a secret key).
+        padding = 4 - (len(buffer) % 4) # Padding to make length a multiple of four.
+        buffer = bytes([255] * padding) + buffer # Pad until length is a multiple of four.
+        subarrays = list(parts(buffer, length=4)) # Split into subarrays of length four.
+
+        # Build up shares of the plaintext where each share is actually a list of
+        # shares (one such share per subarray of the plaintext).
+        shares_of_array = [[] for _ in range(len(key['cluster']['nodes']))]
+        for subarray in subarrays:
+            subarray_as_int = int.from_bytes(subarray, byteorder='little', signed=False)
+            subarray_as_shares = _shamirs_shares(
+                subarray_as_int,
+                len(key['cluster']['nodes']),
+                key['threshold'],
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+            for (i, subarray_share) in enumerate(subarray_as_shares):
+                shares_of_array[i].append(subarray_share)
+
+        # Convert each share from a list (of subarray shares) representation into a
+        # single integer representation.
+        shares = []
+        for (i, share_of_array) in enumerate(shares_of_array):
+            # Each Shamir's share has an index and a value component. The index
+            # will not change within each share (assuming the share indices are
+            # always the same and in the same order). Therefore, the index is
+            # only stored once to reduce its overhead.
+            index = share_of_array[0][0].to_bytes(4, byteorder='little', signed=False)
+            share_of_array_as_bytes = bytes(0) + index
+            for subarray_share in share_of_array:
+                value = subarray_share[1].to_bytes(5, byteorder='little', signed=False)
+                share_of_array_as_bytes = share_of_array_as_bytes + value
+            shares.append(_pack(optional_enc(share_of_array_as_bytes)))
+
+        return shares
 
     # Encrypt (i.e., hash) a plaintext for matching.
     if key['operations'].get('match'):
@@ -974,8 +1024,8 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        # For multiple-node clusters, the ciphertext is secret-shared using XOR
-        # (with each share symmetrically encrypted in the case of a secret key).
+        # For multiple-node clusters, the shares may be encrypted using a symmetric
+        # key (in the case of a secret key).
         shares = [_unpack(share) for share in ciphertext]
         if 'material' in key:
             try:
@@ -986,11 +1036,51 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        bytes_ = bytes(len(shares[0]))
-        for share_ in shares:
-            bytes_ = _xor(bytes_, share_)
+        # For multiple-node clusters and no threshold, the plaintext is secret-shared
+        # using XOR (with each share symmetrically encrypted in the case of a secret
+        # key).
+        if 'threshold' not in key:
+            bytes_ = bytes(len(shares[0]))
+            for share_ in shares:
+                bytes_ = _xor(bytes_, share_)
 
-        return _decode(bytes_)
+            return _decode(bytes_)
+
+        # For multiple-node clusters and a threshold, Shamir's secret sharing is used
+        # to create a secret-shared plaintext (with each share symmetrically encrypted
+        # in the case of a secret key).
+        shares_of_plaintext = [list(parts(share[4:], length=5)) for share in shares]
+        indices = [ # Ordered list of indices for the shares of the plaintext.
+            int.from_bytes(share[:4], byteorder='little', signed=False)
+            for share in shares
+        ]
+        number_of_plaintext_subarrays = len(shares_of_plaintext[0])
+        array = bytes(0) # Accumulator for assembling plaintext (an array of bytes).
+        for i in range(number_of_plaintext_subarrays): # Subarrays making up plaintext.
+            subarray_shares = [
+                [
+                    indices[j],
+                    int.from_bytes(subarray_share[i], byteorder='little', signed=False)
+                ]
+                for (j, subarray_share) in enumerate(shares_of_plaintext)
+            ]
+            subarray_as_int = _shamirs_recover(
+                subarray_shares,
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+            subarray_as_bytes = subarray_as_int.to_bytes(
+                4,
+                byteorder='little',
+                signed=False
+            )
+            array += subarray_as_bytes
+
+        # Drop padding bytes (added during encryption so that byte count is a
+        # multiple of four).
+        while array[0] == 255:
+            array = array[1:]
+
+        return _decode(array)
 
     # Decrypt a value that was encrypted in a summation-compatible way.
     if key['operations'].get('sum'):
