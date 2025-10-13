@@ -10,8 +10,8 @@ import secrets
 import hashlib
 import hmac
 from parts import parts
-from lagrange import lagrange
 import bcl
+import shamirs
 import pailliers
 
 _PAILLIER_KEY_LENGTH = 2048
@@ -133,59 +133,6 @@ def _random_int(
         return minimum + integer
 
     return minimum + secrets.randbelow(maximum + 1 - minimum)
-
-def _shamirs_eval(coefficients: Sequence[int], x: int, prime: int) -> int:
-    """
-    Evaluates polynomial (represented as a sequence of coefficients) at ``x``.
-    """
-    accum = 0
-    for coeff in reversed(coefficients):
-        accum *= x
-        accum += coeff
-        accum %= prime
-
-    return accum
-
-def _shamirs_shares(
-        plaintext: int,
-        quantity: int,
-        threshold: int,
-        prime: int
-    ) -> Sequence[Sequence[int]]:
-    """
-    Uses Shamir's secret sharing scheme to generate and return a collection of
-    secret shares representing the supplied plaintext.
-
-    >>> _shamirs_shares(123, 2, 3, _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
-    Traceback (most recent call last):
-      ...
-    ValueError: quantity of shares cannot be less than the reconstruction threshold
-    """
-    if threshold > quantity:
-        raise ValueError(
-            'quantity of shares cannot be less than the reconstruction threshold'
-        )
-
-    coefficients = (
-        [plaintext] +
-        [secrets.randbelow(prime - 1) for _ in range(threshold - 1)]
-    )
-    return [
-        [i, _shamirs_eval(coefficients, i, prime)]
-        for i in range(1, quantity + 1)
-    ]
-
-def _shamirs_recover(shares: Sequence[Sequence[int]], prime: int) -> int:
-    """
-    Recover the plaintext value from the supplied sequence of Shamir's secret shares.
-
-    >>> prime = _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-    >>> _shamirs_recover([[0, 123]], prime)
-    123
-    >>> _shamirs_recover([[0, 123], [1, 123], [2, 123]], prime)
-    123
-    """
-    return lagrange(shares, prime)
 
 def _pack(b: bytes) -> str:
     """
@@ -819,12 +766,16 @@ def encrypt(
         shares_of_array = [[] for _ in range(len(key['cluster']['nodes']))]
         for subarray in subarrays:
             subarray_as_int = int.from_bytes(subarray, byteorder='little', signed=False)
-            subarray_as_shares = _shamirs_shares(
-                subarray_as_int,
-                len(key['cluster']['nodes']),
-                key['threshold'],
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-            )
+            subarray_as_shares = [
+                (share.index, share.value)
+                for share in shamirs.shares(
+                    plaintext=(subarray_as_int % _SECRET_SHARED_SIGNED_INTEGER_MODULUS),
+                    quantity=len(key['cluster']['nodes']),
+                    modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                    threshold=key['threshold'],
+                    compact=True # Do not store modulus in share objects.
+                )
+            ]
             for (i, subarray_share) in enumerate(subarray_as_shares):
                 shares_of_array[i].append(subarray_share)
 
@@ -897,14 +848,19 @@ def encrypt(
             key['material'][i] if 'material' in key else 1
             for i in range(len(key['cluster']['nodes']))
         ]
-        shares = _shamirs_shares(
-            plaintext,
-            len(key['cluster']['nodes']),
-            key['threshold'],
-            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        )
-        for (i, share) in enumerate(shares):
-            share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        shares = [
+            (
+                share.index,
+                (masks[i] * share.value) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+            for (i, share) in enumerate(shamirs.shares(
+                plaintext=(plaintext % _SECRET_SHARED_SIGNED_INTEGER_MODULUS),
+                quantity=len(key['cluster']['nodes']),
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold'],
+                compact=True # Do not store modulus in share objects.
+            ))
+        ]
 
         return shares
 
@@ -1113,9 +1069,10 @@ def decrypt(
                 ]
                 for (j, subarray_share) in enumerate(shares_of_plaintext)
             ]
-            subarray_as_int = _shamirs_recover(
-                subarray_shares,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            subarray_as_int = shamirs.reveal(
+                shares=[shamirs.share(*share) for share in subarray_shares],
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold']
             )
             subarray_as_bytes = subarray_as_int.to_bytes(
                 4,
@@ -1177,7 +1134,11 @@ def decrypt(
                 )
                 for (i, share) in enumerate(ciphertext)
             ]
-            plaintext = _shamirs_recover(shares, _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+            plaintext = shamirs.reveal(
+                shares=[shamirs.share(*share) for share in shares],
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold']
+            )
 
         # Field elements in the "upper half" of the fields used for the Paillier,
         # additive and Shamir's schemes represent negative integers.

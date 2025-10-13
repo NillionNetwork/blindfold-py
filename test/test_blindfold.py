@@ -10,6 +10,7 @@ import base64
 import hashlib
 import pytest
 
+import shamirs
 import pailliers
 import blindfold
 
@@ -20,38 +21,6 @@ _SEED = "012345678901234567890123456789012345678901234567890123456789"
 """
 Seed used for tests confirming that key generation from seeds is consistent.
 """
-
-def _shamirs_add(
-        shares_a: Sequence[Sequence[int]],
-        shares_b: Sequence[Sequence[int]],
-        prime: int
-    ) -> Sequence[Sequence[int]]:
-    """
-    Adds two sets of shares componentwise, assuming they use the same indices.
-
-    >>> prime = 1009
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (1, 456)], prime)
-    [[0, 246], [1, 912]]
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123)], prime)
-    Traceback (most recent call last):
-      ...
-    ValueError: sequences of shares must have the same length
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (2, 456)], prime)
-    Traceback (most recent call last):
-      ...
-    ValueError: shares in each sequence must have the same indices
-    """
-    if len(shares_a) != len(shares_b):
-        raise ValueError('sequences of shares must have the same length')
-
-    if [i for (i, _) in shares_a] != [i for (i, _) in shares_b]:
-        raise ValueError('shares in each sequence must have the same indices')
-
-    return [
-        [i, (v + w) % prime]
-        for (i, v), (j, w) in zip(shares_a, shares_b)
-        if i == j
-    ]
 
 def to_hash_base64(output: Union[bytes, list[int]]) -> str:
     """
@@ -594,7 +563,8 @@ class TestSecureComputations(TestCase):
         pk = blindfold.PublicKey.generate(sk)
 
         # Ciphertexts are always represented as hexadecimal strings
-        # for portability.
+        # for portability (due to the large integer sizes required
+        # within the Paillier cryptosystem).
         a = pailliers.cipher(int(blindfold.encrypt(pk, 123), 16))
         b = pailliers.cipher(int(blindfold.encrypt(pk, 456), 16))
         c = pailliers.cipher(int(blindfold.encrypt(pk, 789), 16))
@@ -628,18 +598,13 @@ class TestSecureComputations(TestCase):
         """
         sk = blindfold.SecretKey.generate(cluster(3), {'sum': True}, threshold=2)
 
-        (a0, a1, a2) = blindfold.encrypt(sk, 123)
-        (b0, b1, b2) = blindfold.encrypt(sk, 456)
-        (c0, c1, c2) = blindfold.encrypt(sk, 789)
-        (r0, r1, r2) = _shamirs_add(
-            _shamirs_add(
-                [a0, a1, a2],
-                [b0, b1, b2],
-                sk._modulus()
-            ),
-            [c0, c1, c2],
-            sk._modulus()
+        xs = blindfold.encrypt(sk, 123)
+        ys = blindfold.encrypt(sk, 456)
+        zs = blindfold.encrypt(sk, 789)
+        rs = shamirs.add(
+            [shamirs.share(*s) for s in (xs + ys + zs)],
+            modulus=sk._modulus()
         )
 
-        decrypted = blindfold.decrypt(sk, [r0, r1, r2])
+        decrypted = blindfold.decrypt(sk, rs)
         self.assertEqual(decrypted, 123 + 456 + 789)
