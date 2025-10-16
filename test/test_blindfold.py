@@ -387,49 +387,188 @@ class TestFunctions(TestCase):
                         )
                         self.assertEqual(decrypted, plaintext)
 
-class TestCiphertextRepresentations(TestCase):
+class TestRepresentations(TestCase):
     """
-    Tests of the portable representation of ciphertexts.
+    Tests the portability and compatibility of key and ciphertext representations.
     """
-    def test_ciphertext_representation_for_store_with_multiple_nodes(self):
+    def test_representations_for_store_with_single_node(self):
         """
-        Test that ciphertext representation when storing in a multiple-node cluster.
+        Confirm ability to handle representation of keys and ciphertexts for
+        storage in a single-node cluster.
         """
-        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True})
         plaintext = 'abc'
+        sk = blindfold.SecretKey.load({
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
+            'cluster': {'nodes': [{}]}, 'operations': {'store': True}
+        })
+        self.assertEqual(
+            sk,
+            blindfold.SecretKey.generate(cluster(1), {'store': True}, seed=_SEED)
+        )
+        ciphertext = 'eJHSIhn4VxpgLWuvk4/dWVm3bYhyTnmeqiGw33lkvEZJ1vvLn5RodwBdpqo='
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+    def test_representations_for_store_with_multiple_nodes(self):
+        """
+        Confirm ability to handle representation of keys and ciphertexts for
+        storage in a multiple-node cluster.
+        """
+        plaintext = 'abc'
+
+        ck = blindfold.ClusterKey.load({
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'store': True}
+        })
+        self.assertEqual(ck, blindfold.ClusterKey.generate(cluster(3), {'store': True}))
         ciphertext = ['Ifkz2Q==', '8nqHOQ==', '0uLWgw==']
-        decrypted = blindfold.decrypt(ck, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
-    def test_ciphertext_representation_for_store_with_multiple_nodes_with_threshold(self):
+        sk = blindfold.SecretKey.load({
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'store': True}
+        })
+        self.assertEqual(
+            sk,
+            blindfold.SecretKey.generate(cluster(3), {'store': True}, seed=_SEED)
+        )
+        ciphertext = [
+            'ioDjqeotjngxp8XLRBYMToS2rpCFJdFGFhPP28tb0EZrFc087sVGCoDXHuU=',
+            '3cZW1FAxcRauF/N1x/daEDX5rX7c08N8NgVYtzVhJphXNVuwrN6YA1nbiIM=',
+            'BPzn43eqMovPECsMzlDRq/sG73lqeprbadWa+SzZ+WlZ5m3Vst24KBpNGgI='
+        ]
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+    def test_representations_for_store_with_multiple_nodes_with_threshold(self):
         """
-        Test that ciphertext representation when storing in a multiple-node cluster.
+        Confirm ability to handle representation of keys and ciphertexts for
+        storage (with threshold) in a multiple-node cluster.
         """
-        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True}, threshold=2)
         plaintext = 'abc'
+
+        ck = blindfold.ClusterKey.load({
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'store': True},
+            'threshold': 2
+        })
+        self.assertEqual(
+            ck,
+            blindfold.ClusterKey.generate(cluster(3), {'store': True}, threshold=2)
+        )
         ciphertext = ['AQAAAAICrcwAdifgFQA=', 'AgAAAAUEWpkA+u1dyAA=', 'AwAAAAgGB2YAb7TbegA=']
-        decrypted = blindfold.decrypt(ck, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
-    def test_ciphertext_representation_for_sum_with_multiple_nodes(self):
+        sk = blindfold.SecretKey.load({
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'store': True},
+            'threshold': 2
+        })
+        self.assertEqual(
+            sk,
+            blindfold.SecretKey.generate(cluster(3), {'store': True}, threshold=2, seed=_SEED)
+        )
+        ciphertext = [
+            'gbwfluBqUakTrjEtOREArFjEctKIV1gI8Yv4bQv75MJnN2FN2+kJU+exIuv7yVec/Z/ILu7r',
+            'R0RPv8fE4vPZKudck1qzrxvg0FOn/HAHSEIX0Io0BFJexMP5V7VvyHg0/94853bUzWTBocmL',
+            'a2/usuHy69KFodRixaUdnsBxSDPRXikwqt/JqeXjolUSU1l7Hn1atWC0soC6zHdRM+NXreD9'
+        ]
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+    def test_representations_for_sum_with_single_node(self):
         """
-        Test that ciphertext representation when storing in a multiple-node cluster.
+        Confirm ability to handle representation of keys and ciphertexts for
+        summation (with threshold) in a single-node cluster.
         """
-        ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True})
         plaintext = 123
+        sk = blindfold.SecretKey.load({
+            'material':{
+                'l': (
+                    '17180710124328693910455057887214184059303187053517283200908251615178685092277'
+                    '68781003825543371514027055406794542204777828069029196158617836785676131719196'
+                ),
+                'm': (
+                    '36750926513795853434585168117489663841456031899314231851820160524157189283164'
+                    '50771207416561620439623920688439253141292243122044846050470239308322700782213'
+                ),
+                'n': (
+                    '10308426074597216346273034732328510435581912232110369920544950969107211055366'
+                    '81739294313759304465108824301069626243406484904984349541681357234446259866326'
+                    '7'
+                ),
+                'g': (
+                    '80305305698293730896962830440487758915654402490995374612274802412883992221923'
+                    '17259092079214965301856055627777412259469950046153383889046622294722297977903'
+                    '21844769070633792102283544209510902482137967535730134757715877943631913072743'
+                    '01123732060710963981670091105550908978777514231236658174687534680701412538826'
+                )
+            },
+            'cluster': {'nodes': [{}]},
+            'operations': {'sum': True}
+        })
+        ciphertext = (
+            '55869d61244f52780793eeb7c79b1a681b1c54536041f6703073c93f1e45da8208'
+            '2e23e5ada2f27819c88fe07a0e2321b9460582fcc6ab8ca62eb3a912ec6e997ab0'
+            'eb930fdc8fe4035f924bf027d3900db0677e694dbdba50b24cd0fb60a37710a919'
+            'a4faf5fe43c85d7a4758ae99f1a3162c64d080943605af34b2bfd10d88'
+        )
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+    def test_representations_for_sum_with_multiple_nodes(self):
+        """
+        Confirm ability to handle representation of keys and ciphertexts for
+        summation in a multiple-node cluster.
+        """
+        plaintext = 123
+
+        ck = blindfold.ClusterKey.load({
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'sum': True}
+        })
+        self.assertEqual(ck, blindfold.ClusterKey.generate(cluster(3), {'sum': True}))
         ciphertext = [456, 246, 4294967296 + 15 - 123 - 456]
-        decrypted = blindfold.decrypt(ck, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
-    def test_ciphertext_representation_for_sum_with_multiple_nodes_with_threshold(self):
+        sk = blindfold.SecretKey.load({
+            'material': [2677312581, 321207441, 2186773557],
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'sum': True}
+        })
+        self.assertEqual(sk, blindfold.SecretKey.generate(cluster(3), {'sum': True}, seed=_SEED))
+        ciphertext = [3874430451, 3116877887, 2318008363]
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+    def test_representations_for_sum_with_multiple_nodes_with_threshold(self):
         """
-        Test that ciphertext representation when storing in a multiple-node cluster.
+        Confirm ability to handle representation of keys and ciphertexts for
+        summation (with threshold) in a multiple-node cluster.
         """
-        ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
         plaintext = 123
+
+        ck = blindfold.ClusterKey.load({
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'sum': True},
+            'threshold': 2
+        })
+        self.assertEqual(
+            ck,
+            blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+        )
         ciphertext = [[1, 1382717699], [2, 2765435275], [3, 4148152851]]
-        decrypted = blindfold.decrypt(ck, ciphertext)
-        self.assertEqual(decrypted, plaintext)
+        self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
+
+        sk = blindfold.SecretKey.load({
+            'material': [2677312581, 321207441, 2186773557],
+            'cluster': {'nodes': [{}, {}, {}]},
+            'operations': {'sum': True},
+            'threshold': 2
+        })
+        self.assertEqual(
+            sk,
+            blindfold.SecretKey.generate(cluster(3), {'sum': True}, threshold=2, seed=_SEED)
+        )
+        ciphertext = [(1, 177325002), (2, 986000561), (3, 2621193783)]
+        self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
 
 class TestFunctionsErrors(TestCase):
     """
@@ -555,7 +694,7 @@ class TestSecureComputations(TestCase):
     Tests consisting of end-to-end workflows involving secure computation.
     """
     # pylint: disable=protected-access # To access ``SecretKey._modulus`` method.
-    def test_workflow_for_secure_sum_with_single_node(self):
+    def test_workflow_for_secure_sum_mul_with_single_node(self):
         """
         Test secure summation workflow for a cluster that has a single node.
         """
@@ -568,12 +707,19 @@ class TestSecureComputations(TestCase):
         a = pailliers.cipher(int(blindfold.encrypt(pk, 123), 16))
         b = pailliers.cipher(int(blindfold.encrypt(pk, 456), 16))
         c = pailliers.cipher(int(blindfold.encrypt(pk, 789), 16))
-        r = hex(pailliers.add(pk['material'], a, b, c))
+        r = hex(
+                pailliers.add(
+                    pk['material'],
+                    pailliers.mul(pk['material'], a, 2),
+                    pailliers.mul(pk['material'], b, -1),
+                    c
+                )
+            )
 
         decrypted = blindfold.decrypt(sk, r)
-        self.assertEqual(decrypted, 123 + 456 + 789)
+        self.assertEqual(decrypted, (2 * 123) + (-1 * 456) + 789)
 
-    def test_workflow_for_secure_sum_with_multiple_nodes(self):
+    def test_workflow_for_secure_sum_mul_with_multiple_nodes(self):
         """
         Test secure summation workflow for a cluster that has multiple nodes.
         """
@@ -583,28 +729,30 @@ class TestSecureComputations(TestCase):
         (b0, b1, b2) = blindfold.encrypt(sk, 456)
         (c0, c1, c2) = blindfold.encrypt(sk, 789)
         (r0, r1, r2) = (
-            (a0 + b0 + c0) % sk._modulus(),
-            (a1 + b1 + c1) % sk._modulus(),
-            (a2 + b2 + c2) % sk._modulus()
+            ((2 * a0) + (-1 * b0) + c0) % sk._modulus(),
+            ((2 * a1) + (-1 * b1) + c1) % sk._modulus(),
+            ((2 * a2) + (-1 * b2) + c2) % sk._modulus()
         )
 
         decrypted = blindfold.decrypt(sk, [r0, r1, r2])
-        self.assertEqual(decrypted, 123 + 456 + 789)
+        self.assertEqual(decrypted, (2 * 123) + (-1 * 456) + 789)
 
-    def test_workflow_for_secure_sum_with_multiple_nodes_with_threshold(self):
+    def test_workflow_for_secure_sum_mul_with_multiple_nodes_with_threshold(self):
         """
         Test secure summation workflow with a threshold for a cluster that has
         multiple nodes.
         """
         sk = blindfold.SecretKey.generate(cluster(3), {'sum': True}, threshold=2)
 
-        xs = blindfold.encrypt(sk, 123)
-        ys = blindfold.encrypt(sk, 456)
-        zs = blindfold.encrypt(sk, 789)
+        xs = [shamirs.share(*s) for s in blindfold.encrypt(sk, 123)]
+        ys = [shamirs.share(*s) for s in blindfold.encrypt(sk, 456)]
+        zs = [shamirs.share(*s) for s in blindfold.encrypt(sk, 789)]
         rs = shamirs.add(
-            [shamirs.share(*s) for s in (xs + ys + zs)],
+            shamirs.mul(xs, 2, modulus=sk._modulus()),
+            shamirs.mul(ys, -1, modulus=sk._modulus()),
+            zs,
             modulus=sk._modulus()
         )
 
         decrypted = blindfold.decrypt(sk, rs)
-        self.assertEqual(decrypted, 123 + 456 + 789)
+        self.assertEqual(decrypted, (2 * 123) + (-1 * 456) + 789)
