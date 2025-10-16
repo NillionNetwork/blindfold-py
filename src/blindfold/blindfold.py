@@ -9,27 +9,34 @@ import base64
 import secrets
 import hashlib
 import hmac
-from lagrange import lagrange
+from parts import parts
 import bcl
+import shamirs
 import pailliers
 
 _PAILLIER_KEY_LENGTH = 2048
 """Length in bits of Paillier keys."""
 
-_PLAINTEXT_SIGNED_INTEGER_MIN = -2147483648
+_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
+"""Modulus to use for secret sharing of 32-bit signed integers."""
+
+_PLAINTEXT_SIGNED_INTEGER_MIN = -(2 ** 31)
 """Minimum plaintext 32-bit signed integer value that can be encrypted."""
 
-_PLAINTEXT_SIGNED_INTEGER_MAX = 2147483647
+_PLAINTEXT_SIGNED_INTEGER_MAX = (2 ** 31) - 1
 """Maximum plaintext 32-bit signed integer value that can be encrypted."""
-
-_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
-"""Modulus to use for additive secret sharing of 32-bit signed integers."""
 
 _PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
 """Maximum length of plaintext string values that can be encrypted."""
 
 _HASH = hashlib.sha512
 """Hash function used for HKDF and matching."""
+
+def _xor(a: bytes, b: bytes) -> bytes:
+    """
+    Return the bitwise XOR of two arrays of bytes.
+    """
+    return bytes(a_i ^ b_i for (a_i, b_i) in zip(a, b))
 
 def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
@@ -39,6 +46,7 @@ def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
     """
     if len(salt) == 0:
         salt = bytes([0] * _HASH().digest_size)
+
     return hmac.new(salt, input_key, _HASH).digest()
 
 def _hkdf_expand(pseudo_random_key: bytes, info: bytes, length: int) -> bytes:
@@ -53,6 +61,7 @@ def _hkdf_expand(pseudo_random_key: bytes, info: bytes, length: int) -> bytes:
         i += 1
         t = hmac.new(pseudo_random_key, t + info + bytes([i]), _HASH).digest()
         okm += t
+
     return okm[:length]
 
 def _hkdf(length: int, input_key: bytes, salt: bytes = b'', info: bytes = b'') -> bytes:
@@ -62,7 +71,11 @@ def _hkdf(length: int, input_key: bytes, salt: bytes = b'', info: bytes = b'') -
     prk = _hkdf_extract(salt, input_key)
     return _hkdf_expand(prk, info, length)
 
-def _random_bytes(length: int, seed: Optional[bytes] = None, salt: Optional[bytes] = None) -> bytes:
+def _random_bytes(
+        length: int,
+        seed: Optional[bytes] = None,
+        salt: Optional[bytes] = None
+    ) -> bytes:
     """
     Return a random :obj:`bytes` value of the specified length (using
     the seed if one is supplied).
@@ -120,78 +133,6 @@ def _random_int(
         return minimum + integer
 
     return minimum + secrets.randbelow(maximum + 1 - minimum)
-
-def _shamirs_eval(poly, x, prime):
-    """
-    Evaluates polynomial (coefficient tuple) at x.
-    """
-    accum = 0
-    for coeff in reversed(poly):
-        accum *= x
-        accum += coeff
-        accum %= prime
-    return accum
-
-def _shamirs_shares(
-        secret,
-        total_shares,
-        minimum_shares,
-        prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS
-):
-    """
-    Generates a random Shamir pool for a given secret and returns share points.
-
-    >>> _shamirs_shares(123, 2, 3)
-    Traceback (most recent call last):
-      ...
-    ValueError: total number of shares cannot be less than the minimum number of shares
-    """
-    if minimum_shares > total_shares:
-        raise ValueError(
-            'total number of shares cannot be less than the minimum number of shares'
-        )
-
-    poly = [secret] + [secrets.randbelow(prime - 1) for _ in range(minimum_shares - 1)]
-    points = [[i, _shamirs_eval(poly, i, prime)] for i in range(1, total_shares + 1)]
-    return points
-
-def _shamirs_recover(shares, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
-    """
-    Recover the secret value from the supplied share instances.
-
-    >>> _shamirs_recover([[0, 123]])
-    123
-    >>> _shamirs_recover([[0, 123], [1, 123], [2, 123]])
-    123
-    """
-    return lagrange(shares, prime)
-
-def _shamirs_add(shares_a, shares_b, prime=_SECRET_SHARED_SIGNED_INTEGER_MODULUS):
-    """
-    Adds two sets of shares pointwise, assuming they use the same indices.
-
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (1, 456)])
-    [[0, 246], [1, 912]]
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123)])
-    Traceback (most recent call last):
-      ...
-    ValueError: shares sets must have the same length
-    >>> _shamirs_add([(0, 123), (1, 456)], [(0, 123), (2, 456)])
-    Traceback (most recent call last):
-      ...
-    ValueError: shares must have the same indices
-    """
-    if len(shares_a) != len(shares_b):
-        raise ValueError('shares sets must have the same length')
-
-    if [i for (i, _) in shares_a] != [i for (i, _) in shares_b]:
-        raise ValueError('shares must have the same indices')
-
-    return [
-        [i, (v + w) % prime]
-        for (i, v), (j, w) in zip(shares_a, shares_b)
-        if i == j
-    ]
 
 def _pack(b: bytes) -> str:
     """
@@ -312,7 +253,7 @@ class SecretKey(dict):
         >>> SecretKey.generate({'nodes': [{}, {}]}, {'match': True}, threshold=1)
         Traceback (most recent call last):
           ...
-        ValueError: thresholds are only supported for the sum operation
+        ValueError: thresholds are only supported for the store and sum operations
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=1)
         Traceback (most recent call last):
           ...
@@ -320,13 +261,11 @@ class SecretKey(dict):
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=-1)
         Traceback (most recent call last):
           ...
-        ValueError: threshold must a positive integer not larger than the cluster size
+        ValueError: threshold must be a positive integer not larger than the cluster size
         >>> SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=3)
         Traceback (most recent call last):
           ...
-        ValueError: threshold must a positive integer not larger than the cluster size
-        
-        
+        ValueError: threshold must be a positive integer not larger than the cluster size
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, seed=bytes([123]))
         Traceback (most recent call last):
           ...
@@ -355,6 +294,8 @@ for single-node clusters
         ):
             raise ValueError('valid cluster configuration is required')
 
+        # Store the cluster size as specified in the supplied key to allow for
+        # more concise code below.
         cluster_size = len(secret_key['cluster']['nodes'])
 
         if cluster_size < 1:
@@ -374,15 +315,18 @@ for single-node clusters
                 raise TypeError('threshold must be an integer')
             if threshold < 1 or threshold > cluster_size:
                 raise ValueError(
-                    'threshold must a positive integer not larger than the cluster size'
+                    'threshold must be a positive integer not larger than the cluster size'
                 )
             if cluster_size == 1:
                 raise ValueError(
                     'thresholds are only supported for multiple-node clusters'
                 )
-            if not secret_key['operations'].get('sum'):
+            if (
+                not secret_key['operations'].get('store') and
+                not secret_key['operations'].get('sum')
+            ):
                 raise ValueError(
-                    'thresholds are only supported for the sum operation'
+                    'thresholds are only supported for the store and sum operations'
                 )
 
         if secret_key['operations'].get('store'):
@@ -398,7 +342,7 @@ for single-node clusters
             secret_key['material'] = _random_bytes(64, seed)
 
         if secret_key['operations'].get('sum'):
-            if len(secret_key['cluster']['nodes']) == 1:
+            if cluster_size == 1:
                 # Paillier secret key for encrypting a plaintext integer value.
                 if seed is not None:
                     raise ValueError(
@@ -407,7 +351,7 @@ for single-node clusters
                     )
                 secret_key['material'] = pailliers.secret(SecretKey._paillier_key_length)
             else:
-                # Distinct multiplicative mask for each additive share.
+                # Distinct multiplicative mask for each share.
                 secret_key['material'] = [
                     _random_int(
                         1,
@@ -422,6 +366,52 @@ for single-node clusters
                 ]
 
         return secret_key
+
+    def _modulus(self: SecretKey) -> int:
+        """
+        Return the modulus governing the domain of plaintexts of the Paillier,
+        additive, or Shamir's scheme corresponding to this key instance.
+
+        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, 2)
+        >>> isinstance(sk._modulus(), int)
+        True
+        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+        >>> isinstance(sk._modulus(), int)
+        True
+        >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
+        >>> isinstance(sk._modulus(), int)
+        True
+        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, 2)
+        >>> isinstance(sk._modulus(), int)
+        True
+
+        If the scheme associated with a key instance has no modulus, an
+        exception is raised.
+
+        >>> SecretKey.generate({'nodes': [{}]}, {'store': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        >>> SecretKey.generate({'nodes': [{}, {}]}, {'store': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        >>> SecretKey.generate({'nodes': [{}]}, {'match': True})._modulus()
+        Traceback (most recent call last):
+          ...
+        ValueError: scheme associated with key has no modulus
+        """
+        if isinstance(self.get('threshold'), int):
+            return _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+
+        if self.get('operations').get('sum'):
+            return (
+                self.get('material')[2]
+                if len(self['cluster']['nodes']) == 1 else
+                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+
+        raise ValueError('scheme associated with key has no modulus')
 
     def dump(self: SecretKey) -> dict:
         """
@@ -442,7 +432,7 @@ for single-node clusters
             dictionary['threshold'] = self['threshold']
 
         if isinstance(self['material'], list):
-            # Additive secret sharing node-specific masks.
+            # Node-specific masks for secret shares (for sum operations).
             if all(isinstance(k, int) for k in self['material']):
                 dictionary['material'] = self['material']
         elif isinstance(self['material'], (bytes, bytearray)):
@@ -477,7 +467,7 @@ for single-node clusters
             secret_key['threshold'] = dictionary['threshold']
 
         if isinstance(dictionary['material'], list):
-            # Additive secret sharing node-specific masks.
+            # Node-specific masks for secret shares (for sum operations).
             if all(isinstance(k, int) for k in dictionary['material']):
                 secret_key['material'] = dictionary['material']
         elif isinstance(dictionary['material'], str):
@@ -671,8 +661,23 @@ def encrypt(
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
 
-    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
-    >>> isinstance(encrypt(key, 123), str)
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
+    >>> len(encrypt(sk, 'abc'))
+    60
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'match': True}, seed='xyz')
+    >>> encrypt(sk, 'abc')[:70]
+    'Y3V9Nm4o3F5cTEy+oy3utP19m8XA1eMQ2zFfQiEdGpkE92g4X7eXy4T1yH4u1aBtw0FUs0'
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+    >>> pk = PublicKey.generate(sk)
+    >>> isinstance(encrypt(pk, 123), str)
+    True
+    >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
+    >>> shares = encrypt(sk, 'abc')
+    >>> len(shares) == 2 and all(isinstance(share, str) for share in shares)
+    True
+    >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
+    >>> shares = encrypt(ck, 123)
+    >>> len(shares) == 3 and all(isinstance(share, int) for share in shares)
     True
 
     Invocations that involve invalid argument values or types may raise an
@@ -693,6 +698,8 @@ def encrypt(
       ...
     ValueError: cannot encrypt the supplied plaintext using the supplied key
     """
+    # Local variable for the encoded binary representation of the plaintext.
+    # This variable may or may not be used depending on the type of key supplied.
     buffer = None
 
     # Encode string or binary data for storage or matching.
@@ -710,7 +717,7 @@ def encrypt(
         # Only 32-bit signed integer plaintexts are supported.
         if (
             plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
-            plaintext >= _PLAINTEXT_SIGNED_INTEGER_MAX
+            plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX
         ):
             raise ValueError('numeric plaintext must be a valid 32-bit signed integer')
 
@@ -725,23 +732,69 @@ def encrypt(
                 bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
             )
 
-        # For multiple-node clusters, the ciphertext is secret-shared using XOR
-        # (with each share symmetrically encrypted in the case of a secret key).
+        # For multiple-node clusters, the data or secret shares of the data might
+        # or might not be encrypted by a symmetric key (depending on the supplied
+        # key's parameters).
         optional_enc = (
             (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
             if 'material' in key else
             (lambda s: s)
         )
+
+        # For multiple-node clusters and no threshold, the plaintext is secret-shared
+        # using XOR (with each share symmetrically encrypted in the case of a secret
+        # key).
+        if 'threshold' not in key:
+            shares = []
+            aggregate = bytes(len(buffer))
+            for _ in range(len(key['cluster']['nodes']) - 1):
+                mask = _random_bytes(len(buffer))
+                aggregate = _xor(aggregate, mask)
+                shares.append(optional_enc(mask))
+            shares.append(optional_enc(_xor(aggregate, buffer)))
+            return list(map(_pack, shares))
+
+        # For multiple-node clusters and a threshold, the plaintext is secret-shared
+        # using Shamir's secret sharing (with each share symmetrically encrypted in
+        # the case of a secret key).
+        padding = 4 - (len(buffer) % 4) # Padding to make length a multiple of four.
+        buffer = bytes([255] * padding) + buffer # Pad until length is a multiple of four.
+        subarrays = list(parts(buffer, length=4)) # Split into subarrays of length four.
+
+        # Build up shares of the plaintext where each share is actually a list of
+        # shares (one such share per subarray of the plaintext).
+        shares_of_array = [[] for _ in range(len(key['cluster']['nodes']))]
+        for subarray in subarrays:
+            subarray_as_int = int.from_bytes(subarray, byteorder='little', signed=False)
+            subarray_as_shares = [
+                (share.index, share.value)
+                for share in shamirs.shares(
+                    plaintext=(subarray_as_int % _SECRET_SHARED_SIGNED_INTEGER_MODULUS),
+                    quantity=len(key['cluster']['nodes']),
+                    modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                    threshold=key['threshold'],
+                    compact=True # Do not store modulus in share objects.
+                )
+            ]
+            for (i, subarray_share) in enumerate(subarray_as_shares):
+                shares_of_array[i].append(subarray_share)
+
+        # Convert each share from a list (of subarray shares) representation into a
+        # single integer representation.
         shares = []
-        aggregate = bytes(len(buffer))
-        for _ in range(len(key['cluster']['nodes']) - 1):
-            mask = _random_bytes(len(buffer))
-            aggregate = bytes(a ^ b for (a, b) in zip(aggregate, mask))
-            shares.append(optional_enc(mask))
-        shares.append(optional_enc(
-            bytes(a ^ b for (a, b) in zip(aggregate, buffer))
-        ))
-        return list(map(_pack, shares))
+        for (i, share_of_array) in enumerate(shares_of_array):
+            # Each Shamir's share has an index and a value component. The index
+            # will not change within each share (assuming the share indices are
+            # always the same and in the same order). Therefore, the index is
+            # only stored once to reduce its overhead.
+            index = share_of_array[0][0].to_bytes(4, byteorder='little', signed=False)
+            share_of_array_as_bytes = bytes(0) + index
+            for subarray_share in share_of_array:
+                value = subarray_share[1].to_bytes(5, byteorder='little', signed=False)
+                share_of_array_as_bytes = share_of_array_as_bytes + value
+            shares.append(_pack(optional_enc(share_of_array_as_bytes)))
+
+        return shares
 
     # Encrypt (i.e., hash) a plaintext for matching.
     if key['operations'].get('match'):
@@ -795,10 +848,19 @@ def encrypt(
             key['material'][i] if 'material' in key else 1
             for i in range(len(key['cluster']['nodes']))
         ]
-        num_nodes = len(key['cluster']['nodes'])
-        shares = _shamirs_shares(plaintext, num_nodes, key['threshold'])
-        for (i, share) in enumerate(shares):
-            share[1] = (masks[i] * share[1]) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        shares = [
+            (
+                share.index,
+                (masks[i] * share.value) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            )
+            for (i, share) in enumerate(shamirs.shares(
+                plaintext=(plaintext % _SECRET_SHARED_SIGNED_INTEGER_MODULUS),
+                quantity=len(key['cluster']['nodes']),
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold'],
+                compact=True # Do not store modulus in share objects.
+            ))
+        ]
 
         return shares
 
@@ -850,6 +912,42 @@ def decrypt(
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=2)
     >>> decrypt(key, encrypt(key, -10))
     -10
+
+    A decryption threshold of ``1`` **is permitted** in order to accommodate
+    seamlessly scenarios in which it may be useful to replicate plaintext or
+    encrypted data across nodes (such as for redundancy).
+    
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> decrypt(key, encrypt(key, 123)[:1])
+    123
+    >>> decrypt(key, encrypt(key, 123)[1:2])
+    123
+    >>> decrypt(key, encrypt(key, 123)[2:])
+    123
+
+    However, the use of a threshold of ``1``  incurs the same representation
+    size overheads (compared to simply keeping copies of the same data on
+    different nodes) as the use of larger threshold values. For example, note
+    below that ``80`` > ``68`` and that ``28`` > ``8``.
+
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
+    >>> len(encrypt(key, 123))
+    68
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> len(encrypt(key, 123)[0])
+    80
+    >>> key = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=3)
+    >>> len(encrypt(key, 123)[0])
+    80
+    >>> import base64
+    >>> len(base64.b64encode(int(123).to_bytes(4, 'little')))
+    8
+    >>> key = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=1)
+    >>> len(encrypt(key, 123)[0])
+    28
+    >>> key = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, threshold=3)
+    >>> len(encrypt(key, 123)[0])
+    28
 
     An exception is raised if a ciphertext cannot be decrypted using the
     supplied key (*e.g.*, because one or both are malformed or they are
@@ -931,8 +1029,8 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        # For multiple-node clusters, the ciphertext is secret-shared using XOR
-        # (with each share symmetrically encrypted in the case of a secret key).
+        # For multiple-node clusters, the shares may be encrypted using a symmetric
+        # key (in the case of a secret key).
         shares = [_unpack(share) for share in ciphertext]
         if 'material' in key:
             try:
@@ -943,23 +1041,64 @@ def decrypt(
             except Exception as exc:
                 raise error from exc
 
-        bytes_ = bytes(len(shares[0]))
-        for share_ in shares:
-            bytes_ = bytes(a ^ b for (a, b) in zip(bytes_, share_))
+        # For multiple-node clusters and no threshold, the plaintext is secret-shared
+        # using XOR (with each share symmetrically encrypted in the case of a secret
+        # key).
+        if 'threshold' not in key:
+            bytes_ = bytes(len(shares[0]))
+            for share_ in shares:
+                bytes_ = _xor(bytes_, share_)
 
-        return _decode(bytes_)
+            return _decode(bytes_)
+
+        # For multiple-node clusters and a threshold, Shamir's secret sharing is used
+        # to create a secret-shared plaintext (with each share symmetrically encrypted
+        # in the case of a secret key).
+        shares_of_plaintext = [list(parts(share[4:], length=5)) for share in shares]
+        indices = [ # Ordered list of indices for the shares of the plaintext.
+            int.from_bytes(share[:4], byteorder='little', signed=False)
+            for share in shares
+        ]
+        number_of_plaintext_subarrays = len(shares_of_plaintext[0])
+        array = bytes(0) # Accumulator for assembling plaintext (an array of bytes).
+        for i in range(number_of_plaintext_subarrays): # Subarrays making up plaintext.
+            subarray_shares = [
+                [
+                    indices[j],
+                    int.from_bytes(subarray_share[i], byteorder='little', signed=False)
+                ]
+                for (j, subarray_share) in enumerate(shares_of_plaintext)
+            ]
+            subarray_as_int = shamirs.reveal(
+                shares=[shamirs.share(*share) for share in subarray_shares],
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold']
+            )
+            subarray_as_bytes = subarray_as_int.to_bytes(
+                4,
+                byteorder='little',
+                signed=False
+            )
+            array += subarray_as_bytes
+
+        # Drop padding bytes (added during encryption so that byte count is a
+        # multiple of four).
+        while array[0] == 255:
+            array = array[1:]
+
+        return _decode(array)
 
     # Decrypt a value that was encrypted in a summation-compatible way.
     if key['operations'].get('sum'):
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
-            return pailliers.decrypt(
+            plaintext = pailliers.decrypt(
                 key['material'],
                 pailliers.cipher(int(ciphertext, 16))
             )
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
-        if 'threshold' not in key:
+        elif 'threshold' not in key:
             inverse_masks = [
                 pow(
                     key['material'][i] if 'material' in key else 1,
@@ -976,33 +1115,35 @@ def decrypt(
                     ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
                 ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
 
-            # Field elements in the "upper half" of the field represent negative
-            # integers.
-            if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-                plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-
-            return plaintext
-
         # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
-        inverse_masks = [
-            pow(
-                key['material'][i] if 'material' in key else 1,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        else:
+            inverse_masks = [
+                pow(
+                    key['material'][i] if 'material' in key else 1,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS - 2,
+                    _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                for i in range(len(key['cluster']['nodes']))
+            ]
+            shares = [
+                (
+                    share[0],
+                    (
+                        inverse_masks[share[0] - 1] * share[1]
+                    ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                )
+                for (i, share) in enumerate(ciphertext)
+            ]
+            plaintext = shamirs.reveal(
+                shares=[shamirs.share(*share) for share in shares],
+                modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+                threshold=key['threshold']
             )
-            for i in range(len(key['cluster']['nodes']))
-        ]
-        shares = ciphertext
-        for (i, share) in enumerate(shares):
-            share[1] = (
-                inverse_masks[share[0] - 1] * shares[i][1]
-            ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-        plaintext = _shamirs_recover(shares)
 
-        # Field elements in the "upper half" of the field represent negative
-        # integers.
+        # Field elements in the "upper half" of the fields used for the Paillier,
+        # additive and Shamir's schemes represent negative integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-            plaintext -= _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+            plaintext -= key._modulus() # pylint: disable=protected-access
 
         return plaintext
 
@@ -1267,6 +1408,7 @@ def unify(
                     [document[key] for document in documents],
                     ignore
                 )
+
             return results
 
     # Base case: all documents must be equivalent.

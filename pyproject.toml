@@ -6,8 +6,9 @@ license = {text = "MIT"}
 readme = "README.rst"
 requires-python = ">=3.9"
 dependencies = [
-    "lagrange~=3.0",
+    "parts~=4.0",
     "bcl~=2.3",
+    "shamirs~=4.0",
     "pailliers~=0.1"
 ]
 
