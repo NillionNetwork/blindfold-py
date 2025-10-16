@@ -1,5 +1,7 @@
 """
-Test suite containing functional unit tests of exported functions.
+Test suite containing functional unit tests of exported functions. Click on a
+**[source]** link beside any test method to view the examples found in that
+particular test.
 """
 from typing import Union, Set, Sequence
 from unittest import TestCase

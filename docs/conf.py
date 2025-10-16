@@ -13,6 +13,7 @@
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../src')) # Prioritize local module copy.
+sys.path.insert(0, os.path.abspath('..')) # Ensure that test script is found.
 
 
 # -- Project information -----------------------------------------------------

@@ -3,3 +3,4 @@
    :hidden:
 
    _source/blindfold
+   _source/test_blindfold
