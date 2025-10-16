@@ -756,3 +756,29 @@ class TestSecureComputations(TestCase):
 
         decrypted = blindfold.decrypt(sk, rs)
         self.assertEqual(decrypted, (2 * 123) + (-1 * 456) + 789)
+
+class TestDocumentFunctions(TestCase):
+    """
+    Test the allot and unify functions for working with secret-shared documents.
+    """
+    def test_allot(self):
+        """
+        Check that a document is converted correctly into secret shares.
+        """
+        with open('test/test_blindfold.json', 'r', encoding='utf8') as file:
+            data = json.load(file)
+            allotted = blindfold.allot(data['encrypted'])
+            self.assertEqual(allotted, data['allotted'])
+
+    def test_unify(self):
+        """
+        Check that document secret shares are unified correctly into a single
+        document.
+        """
+        with open('test/test_blindfold.json', 'r', encoding='utf8') as file:
+            data = json.load(file)
+            unified = blindfold.unify(
+                blindfold.ClusterKey.generate(cluster(3), {"store": True}),
+                data['shares']["85ce66f5-9049-47cc-a81b-403cd6b49227"],
+            )
+            self.assertEqual(unified, data['plaintext'])

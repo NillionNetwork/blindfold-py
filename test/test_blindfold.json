@@ -1,0 +1,124 @@
+{
+  "plaintext": {
+    "_id": "85ce66f5-9049-47cc-a81b-403cd6b49227",
+    "patient_name": "Barbara Miller",
+    "doctor_name": "Doctor McCoy",
+    "institution_name": "qwen2p5-72b-instruct",
+    "medical_diagnosis": "1. Diabetes Mellitus\n2. Pancreatitis\n3. Splenomegaly",
+    "reasoning_summary": "1. **Diabetes Mellitus:** High sugar in urine (glucosuria) and frequent urination (polyuria) are classic symptoms of diabetes. The chronic fatigue and unexplained weight loss can also be associated with uncontrolled diabetes.\n2. **Pancreatitis:** Elevated serum amylase levels suggest pancreatic inflammation (pancreatitis). This can also cause abdominal pain, particularly in the epigastric region. The presence of bright red blood in the right renal pelvis could indicate a complication or secondary issue related to the pancreas or adjacent organs.\n3. **Splenomegaly:** The radiology report indicates diffuse splenomegaly. This could be a result of chronic inflammation or another underlying condition such as liver disease, hemolytic anemia, or malignancy. The low ferritin levels might suggest anemia or chronic inflammation."
+  },
+  "encrypted": [{
+    "_id": "13177a1f-75de-470c-a9cc-9106aa4d419a",
+    "patient_name": {
+      "%allot": ["0Zo46Q9abqjvAk7v9OpE", "mBCqRBw/k1mARzr7XSk7", "SMjz33EEj5BPCB14xaYN"]
+    },
+    "doctor_name": {
+      "%allot": ["7e7L4hh8tw48UA9IsA==", "sJOko4S4HqHS0jpisg==", "XDkAIuir24+j4XZFew=="]
+    },
+    "institution_name": {
+      "%allot": [
+        "yTu4NGh0c7oG8N2Ns4NHerqw+FIl",
+        "vIL4arcMSULcry38a0dImbLTXpPn",
+        "dMg3O7FKSs33aMIT9a1hkHwR06K2"
+      ]
+    },
+    "medical_diagnosis": {
+      "%allot": [
+        "Lk3B1CuRkiqx71IAwdskDaa5gfXMWuZ5sX2S2T3r+fTy1o3eN8AAM+4QFwBMpC4lPXwh0bGzvuFzNpnklxkTgRHQIoikluRpHr+i9fkXOXcfwVyvL/KJzdCGQ9oEGA5E2PIOINbPA6EmRjEqZehrRmru1t31LUS0gUwGULONLXS1zhu/3wpwrDYdDgbMTzTeqy9+/9nY3CG/QADcaGUVEjRjsArHXoagarPhg4+yZS96fh3i",
+        "nT0SWllb+vKZdZrRdnTM2pD/EP8ASZaOCYr22dpRj62AMFiVHruhFQ/DJfdBggO1kPCC2QSJAAi1mMKxxwjjhRF91YALHRicfLtHl7TzKyqhgn3AXncrYTZhVzuBsvafAtAJXFDDyx4TN6O8pVn/AJyCMm4QBpx+DNmFLv9sJuy/DUzxMfEf/mfDKYC99DVD6KScd0ityINcQDgefsLZJpewO0TrHspBhZpNQcly+OHLIYRz",
+        "siCh5x+rGqEI2ae/xMaMskQn5WOjfQPNmMZKIKTSBDYcj7ZreRrPRZO2U4NkUkTjjePRKOVb0Iq0yzohOXLQSWHBnm/B6pKWGyTXTG2sdzDfN04DHuLLz4eLNKzkxpG8tENpH/8s4NobFry64P3xM50JidqEC7e4rdn6EzyJZPVr6ncdi5gAPDW/Vf9R+G7zMOKG7eMUYMuMbkv4NpbiFOSq5StPLyCOiEDPoyrg1L3CKvzi"
+      ]
+    },
+    "reasoning_summary": {
+      "%allot": [
+        "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"
+      ]
+    }
+  }],
+  "allotted": [
+    [{
+      "_id": "13177a1f-75de-470c-a9cc-9106aa4d419a",
+      "patient_name": { "%share": "0Zo46Q9abqjvAk7v9OpE" },
+      "doctor_name": { "%share": "7e7L4hh8tw48UA9IsA==" },
+      "institution_name": { "%share": "yTu4NGh0c7oG8N2Ns4NHerqw+FIl" },
+      "medical_diagnosis": {
+        "%share": "Lk3B1CuRkiqx71IAwdskDaa5gfXMWuZ5sX2S2T3r+fTy1o3eN8AAM+4QFwBMpC4lPXwh0bGzvuFzNpnklxkTgRHQIoikluRpHr+i9fkXOXcfwVyvL/KJzdCGQ9oEGA5E2PIOINbPA6EmRjEqZehrRmru1t31LUS0gUwGULONLXS1zhu/3wpwrDYdDgbMTzTeqy9+/9nY3CG/QADcaGUVEjRjsArHXoagarPhg4+yZS96fh3i"
+      },
+      "reasoning_summary": {
+        "%share": "qGNGifidevfEdIgFZE6Unzr6KVFqEUdHnQXyDljsZHQUT1ycMOjLiU5wChrDEXOx05pqIYUyTAnjUqf6/sFVIpgN6ogp4n5CquNvtWbhAqNV/NO/IBCSLGmoD7t5++921hBz7j/UmTS7GILIlFoihmIGpTaOS1WfNz5Tw+IfIOtcJMbBRbxc1XPntge1Y3TeIP1Ii7ZeRdZGgklIAe2ZGG+kEMTaAA+buUOGQ8rfenCdgnKs8uJ024iOYal0wfFBylZX6x/SLcA26Oabeo/YJTWI0DwydgHtjpFA3K+e+/mlRDljBGHOveUmJrwO6Uu0qMAEjn3nt4njymg4eU9kHY19wMToF5+kFTrBRa58VM6HM+oFWNexQZ71sFKzFZDKdIULQuvgbMswHBqmannvIPc2fUe7DPvgl7JTNMsPnDf5no5hZr27kejSaXlHwQk862yU3BmXq2th9GIVGgorxmxP7akjs62hXzkdpkF6ji1G06FSQHZuawMyeg0npg9/op4IH4yPbOfOR/Z2As7vAVi9FtcrqRwo/5QjcteEhdn7+Ri4HGAENQApOnXyY+b5KBTzru9z7aMYy7KatHR9VHxsnjPKx8QpIoZv6L7/AaHda0wiT1Dk/oj/6HoWuLqf4TsUg/q7UFhVo/zS4zUAgC7i/8iWsCfjkSpAzKJ5zWlYm3ZKFpvXeh4KFPW3tFk12QLUGSiLNAxBAZ1G9srsP38Eh7uX3GPdh/k="
+      }
+    }],
+    [{
+      "_id": "13177a1f-75de-470c-a9cc-9106aa4d419a",
+      "patient_name": { "%share": "mBCqRBw/k1mARzr7XSk7" },
+      "doctor_name": { "%share": "sJOko4S4HqHS0jpisg==" },
+      "institution_name": { "%share": "vIL4arcMSULcry38a0dImbLTXpPn" },
+      "medical_diagnosis": {
+        "%share": "nT0SWllb+vKZdZrRdnTM2pD/EP8ASZaOCYr22dpRj62AMFiVHruhFQ/DJfdBggO1kPCC2QSJAAi1mMKxxwjjhRF91YALHRicfLtHl7TzKyqhgn3AXncrYTZhVzuBsvafAtAJXFDDyx4TN6O8pVn/AJyCMm4QBpx+DNmFLv9sJuy/DUzxMfEf/mfDKYC99DVD6KScd0ityINcQDgefsLZJpewO0TrHspBhZpNQcly+OHLIYRz"
+      },
+      "reasoning_summary": {
+        "%share": "xGX40T1IciCXL3p8rD5DVTdGsFF83gLO5I8LKjTHL2ihQy99Jf7nNKdGAvfbpe3iy7LaUA/3UQXIqNOl2s+Ybfx+kNs0hiz8DxtDsG7O58DpcH0bHZpcyWu2LA4GztFYaZU8SDlnUYj/DVJR3Oe+iR1WTvISIhNZc9u5CMFG4VDJPfFDeZxTuLEXl3C+HXHtjK5Z2J5PU/SqMAS2YdZ+ekUtOlR8FhThVRMIyvCkSalxo7VIaRXim8aqklSmPXjTJYzB4a1c/34p6dMvvvSQUcDHmBgJGUvRfZfFvOp9jJ4ysKGpNIP78ETQBmO5FQLNwHBTldNnskvPNDpS+IaH5xxKUDgIh3Z1zSRiz3hoshi6qQLrXifz5gIciGJJVu69uq26zstqmhHZLWcgFyTbOeTEqGvkWCcnxGb+qL4xbFqCbMRUOjiDQfMe7rO3KC8n3A7u/vGdnjQ+ksBe+VjdInc2/3JsDU36Ut56VVebXLY/Gcozx5BLBW9ZlOlOfqbGyeG0a3IiS0P0BaokLhDsXKqp0kuxiEeglpkxCOVHc6ep/jZWenZ8qb/1kO+vGu6se2L14EtYEn49K11nGwyto4HXZVA7okLUVF+FJFIRmmMrTipi1xJlFaInzIcYi7gaQ+x0ekFrGnkHI6rxSWrLLxqhmRsXOheu1usutqCJQ9xOZF/d3oL+iYg+nAzd+yP2P0hxo54Zc3260tM1uT/BLUJAlob3Llchfx8="
+      }
+    }],
+    [{
+      "_id": "13177a1f-75de-470c-a9cc-9106aa4d419a",
+      "patient_name": { "%share": "SMjz33EEj5BPCB14xaYN" },
+      "doctor_name": { "%share": "XDkAIuir24+j4XZFew==" },
+      "institution_name": { "%share": "dMg3O7FKSs33aMIT9a1hkHwR06K2" },
+      "medical_diagnosis": {
+        "%share": "siCh5x+rGqEI2ae/xMaMskQn5WOjfQPNmMZKIKTSBDYcj7ZreRrPRZO2U4NkUkTjjePRKOVb0Iq0yzohOXLQSWHBnm/B6pKWGyTXTG2sdzDfN04DHuLLz4eLNKzkxpG8tENpH/8s4NobFry64P3xM50JidqEC7e4rdn6EzyJZPVr6ncdi5gAPDW/Vf9R+G7zMOKG7eMUYMuMbkv4NpbiFOSq5StPLyCOiEDPoyrg1L3CKvzi"
+      },
+      "reasoning_summary": {
+        "%share": "bUvNduWYYbs/PoBZoBGk6m/Z/G42qj35HPiQQQJIInLSLBSEe3Ne3IUWboxs3fkmfQSQHeWyeH4LmxY7S2OkIQUfWiN8DTyShY1CYHBfiQLV4svAHf2rjGV2V5UTWk1dk6UuyGKTp98ndKPwJ9P9Y188gqP0HWakKICPr0o3ppvxbEXrUkcvAKeeUhJ4UCV/zTExNUF/ckuC1T7eCVWEDl/tT7DKc24RgzP3/VUIWqrAAaKI/oH3NCtA0463jvz/z7v7c97vodszIVnbs1suEYc9IVBSAWYckmjhQC2KEA+3l/ClXIdGOcSET7OZ3BsYDNk4d8HnfOJflj0d8umHk/dR5Y+FsJqhtHvN5btxgbdR48iPaJRixryaVVGWL14Wo0fE4lSqmbzJUw/vGjVAOWGXsQw9OLOoN/TE8lVKmAhbgCNSNPEYon6i5qbQmUN3QQsJDMheXTosA4ItijySjXUeYfs8y4c8aJQT03fBoeIKvg4M7oUFAR5Lg5EFrMCUBA3bFZCNV9ZVITkhX/IjKptgrLzqUzLlCH9rWlGsmA07Y0ucB2IR89Gvivg4EGYycxVuPMtFlr4FkI6TzAq1lonSjwqCSvacGLqYqY2a8qHWSAcs8SXvikS7Xd1vXWalyrINmM+/Jk416TVCxn+mzlgqAb3g5FM0aeEoD3CE5tBk30D6qX5AnfEU6ZcObxiviSXBmsL3NAWI8y8BKtVfd14rfFAFnFCZnMg="
+      }
+    }]
+  ],
+  "shares": {
+    "85ce66f5-9049-47cc-a81b-403cd6b49227": [
+      {
+        "_id": "85ce66f5-9049-47cc-a81b-403cd6b49227",
+        "patient_name": { "%share": "iihA7ad6f/QEYGMf2JzR" },
+        "doctor_name": { "%share": "FeafcBeAaBgwDgisZQ==" },
+        "institution_name": { "%share": "6d/29LxWWC5Q8wgs+r8inAr16bJC" },
+        "medical_diagnosis": {
+          "%share": "5o+IyLtSX3OobIYS8cYoYq7ykWBQtufWwws6LktRj9Gb2OSaEUaYgH/B0Mlg8GD3S/Rr9mQ="
+        },
+        "reasoning_summary": {
+          "%share": "ONGaxCEsj2JA3evvor7pFAYuAaw4T3v+A2rRQ2PQ6Ke9v+8gS59K5q8sSyiOlYjj4+AQ6E2AhaONVzVwlgOP4BUISpUZwfmobQtRd+g3+d90mIELXF+dmQSmtgdYFCzcTN8KFZ3GfCQlybRGHmtzKWm8G0ChxW6aTdVAIj222PSXYM28C80Pa2jeH2KT4AkgskpZctKVgYemvZN0tn5JXYq4nzStExgJa0B5+Pf6fSJ+ou8vv3lGmazm2sU5y/nBf//90t/DM5m0SOAM4pxVfoEuA0rmbVqLvFw7W3phETMLPJFLX4Sqq9KhiqnrF3NaGTXri40Wqgo+Qitk/dX+eSjWyFgNcccQuu6O1BbZa7CECUYWZ88thGthbSt9Dtpxxvsx1vrv4V/iGeEHgmr77At5lafx3T6Ms0Zbx8CSH3/L+7SFUdpExe4sHItINqfEqSrmb64FseXeKcM4y6A9S9teMxrwbkvgyUmYVesJ0jGZmCNVeZvaSNTQe5fhyB9UDYVvm18iSGqoNjDC7z1CYAFVvRb+MUWxWOJxVqrHVvRN3sG5LzHttF8orh2Go9XeH1HAh2zCY779p+eKjqfFjgKeGwiZ1vahqOd555jhQ0iXZ7D4Yb2/bsDMDa3EtwuscNfEIUdAYpz3ndSay3LCf8VM/IaCI+cwrzHZnQQqJDJ4pwNzZBAZKBkn0y890yh7UWmIzgKrfcPe/jZFjSp0XRBiX/mlTHxGgT1B+syd3l53XRNtzQGM7/GMtQYtcASSUliQS2N145AT++6OqCdlrehXOy36eAo9O7jJKX5CalerDd7i5y4dUaNRT4F9qm4t8+v6tYsO/sMLBsMRrqyxacGBhGS5D51lwPinQ42M7qm1DE8qSOZ4r9GsTI89HBlXTO0dqG48LtkDKoWMxzSGCUvnIQV0j18ujYHUYxXRvXG1c9AmTR1sGMOIpIHp2iw88f2yU7F5hNRuwT/KSrlfI4C9XFd6RkEBdWKXhL2lpVjmWRF/cs5MZ6NBcFyXFlnGZm3ocCyExNU42egcHbPFJKnmcXkdtHBlOS3LNxYTCOICyv9Qa5p9rmE5ylI+WQxDUuz5eJGcfgKOunBfhQVl"
+        },
+        "_created": "2025-03-13T18:25:25.639Z",
+        "_updated": "2025-03-13T18:25:25.639Z"
+      },
+      {
+        "_id": "85ce66f5-9049-47cc-a81b-403cd6b49227",
+        "patient_name": { "%share": "vx6TDJBzokCS4ENN0VFl" },
+        "doctor_name": { "%share": "2t48aSCEqfMIoh45OA==" },
+        "institution_name": { "%share": "x9wjU1+xgnebcQ6O9Zzsts8pRfLv" },
+        "medical_diagnosis": {
+          "%share": "wa8VLGjujs9ezwOrgF59hzRRUJIFWTdXKW0Pgs0I5WloDYLGDN0FFoQSsmoJ1YQY/WVq5Es="
+        },
+        "reasoning_summary": {
+          "%share": "iwb72eTb8hLlPu8tH5Z1TREbxvDEXFlzRC5ERMMWKI/diBAIujbGryV7lwjWxbOE66Id+kbJuaAtXi9P/tPO/tfL5hAFs4ape+eD+JROgAYrll7KMRich/hlF7eiNcMumhX3Cxii41gNhX6jJ2wYwPezKXOS6PhSOLimKGo9wpzViKGcG+zw2iY20tJFbYtQ4cU8BXz+aWmT4hBNQOVJSSY9zxUIUyL7cN7c7+U0z9ZpdExsxPyvynqHkquBDWj9MDzd0varkyn1vKh2ilamiwH/CDWKRtQufH/0hSWYjXR1v7AjB/0eCNlSybsQP/TEn71IvHEQZzKumM6ml5R+jynNrIiM1k0siwqGRBpsMdscPpkElZB0AoU1Rdkf/f8XCXHOXV5tVqJ/zmFzgvlo3KP4g1523Kr8uDRBZnF9FtuJ4nSkAq/JlyOjphiKbbhMj8glsBTIPTWuQuPd/avAAHVCiBjLAJkejDbq532UtYpI1+nHxaAglHGzCu0vbqS1AxlCKsPgCSI66S/mIj1dpji/hJJOX/DkHd8pYfRYV3T3B7nl27rPmwk3q6N968HddpeeEoBVXYWfcauQDnZ458cPTF6IU+oqDEogPvZhc0KsYrVV04WBp+teOZvViLsTwJTIYkIaADQXW6yzGCmSYr+C1b+XCIkZWy0jbmXf/zeTSvJGdYpN1ErTY/v7/z5EmSuCtF3v1P6RmR1Muo1cMFtHyEXNDpwmUNSyLD09Vv8u5RPCOE4mQuf4XnyVfeQhUkmZ7qy7/R5TYiP5Ru4FFSwuMGmF6Hp2lSYEyAWcMAKQr559xEXkUANIGd5T37fb58pMv0CN3Q3hy/l4KamWzXsiGE3zTUIweY2H+ATYHmWy4hH0kM/r3wFdFtAeQDhAUqQydIbmFnrevQNYaK9hg9qkZrg3OVvHJdtNHR1vNncp0bpeuHWCpLEwHK+AE9SWnn1RG9kIXj9wfpJhU6S8RjIqfb7RcbAaiWQja2uAU/4EcBEvFqLms980B19AGh5/WvFikWArAabIf5WMGzHMZuu5kaXPJX4C4MRxwqntjqyBZbtfMDN59f4JmwNI1AIYK502wKZOapsvV1oCWj36"
+        },
+        "_created": "2025-03-13T18:25:25.827Z",
+        "_updated": "2025-03-13T18:25:25.827Z"
+      },
+      {
+        "_id": "85ce66f5-9049-47cc-a81b-403cd6b49227",
+        "patient_name": { "%share": "NHSyk1Vor9W2zUk+ZajG" },
+        "doctor_name": { "%share": "znzMekNrs8t1z1X6JA==" },
+        "institution_name": { "%share": "L3Kiwo3VqmzmtTTAIkqgWbGu2SPZ" },
+        "medical_diagnosis": {
+          "%share": "JhGzxJfVsN6T1+DKUdUwifbKtYcm5eKvyjZUwuUrD9mHvBI1bpGuuNuAEs8MS4uC0/ZgflY="
+        },
+        "reasoning_summary": {
+          "%share": "suZPPe/dORnEgWG22Fu8FHJZqzWIZlG3bW61T8mhqAgTQphJg4nlJ6oirkk2NRtPby54cWQ6SXHJaDMfCb4lPqSxyfRpFxF1Npmg5hIYDbAwYP/pHShtZ4mxyNHTAY6As+qecuQX7BVLbLmcVHcfhvN8ElxVDfKhFA+DfjL4NEgWgAkAc0mN3iCBrpCw7PYZNPoAV88FjM5AMeZBhvdhfcLgNAHSJVOVc+qFe329wdR0t81jGumaPPYDLU7ZteJTLKpBdEwMgMcogCBaHaSQmu6leRAAR+vB4Eemvz2c6CINrStadlmeiVuSLXGJTebq7/zKRMYs5xjVtoC0CzXlkiFoAaL0yqpdXJ1k8X/Qegf9Qbp+gX8q84kzTYEW01UHoemN7sX23p69vu4SbPL+Xcn1f5bpIbwAahx509SOfc02cLMIfVXZOqT8mvCjNT/pSpGs/9ms+aMVS0GHUmSQIsB91yJLD7uQaV8C0+TpDtikI6vg0ELatctDBRKrht6RZ/tMwuiwKCuyrXpDpG9x6Bm+UeGQHscwNlg2VDu/buaauwo1k+NWDyR6YZ6ZJHtsDeY3+8zjVl5CpCV96KWdG6D/Njox9Xnn0sQq+Q3vRWZfJWzD1lFdqF/3FFcxXN/SwC9lIGQuC8eO5hdb8yg1fhWgTVhnUk5Ah2+PlkGHvmmKmZRRMe473Cec1fS2TXhcuidrCX8r2x0uA0FoVMJGGWtK5dsJLJNO29rd9tuK29E13W7AmCrNzHoN0VCSLbTbZTF7xKunceIv/rRXnKwQ17YNKy0R9Bkoz+qoklu6MzNd1zP6AxiJbcV3OTJLEriabQ+WXqPqUO6Jok8F4yVFwZrCvFsvMao5zVVP3ak3mL5ogDe9+ED9FryQNzJCKEh4cGlArsi7Vsyp/+Omj+6J7vQxK8Qq2GPJyzX3GmHK4mnyghkNlgDO3QGY1EcfrIqKC+mQLQkCv8c+18jGdnGaEdv0AYjFUpxynSqUgKQFm8eOQGc+BQLJrVJVI2uyLCvWS7zshD7drAeZyF38Y/RsLjF/jbW1+XpHqpzdktqN8m7iwSFiMsgkNO0QMjkE4mAyGlGm1lG+dfTMjF40sFax"
+        },
+        "_created": "2025-03-13T18:25:26.043Z",
+        "_updated": "2025-03-13T18:25:26.043Z"
+      }
+    ]
+  }
+}

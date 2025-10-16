@@ -1287,9 +1287,9 @@ def unify(
         ignore: Sequence[str] = None
     ) -> Union[int, bool, str, list, dict]:
     """
-    Convert an object that may contain ciphertexts intended for multiple-node
-    clusters into secret shares of that object. Shallow copies are created
-    whenever possible.
+    Combine a sequence of compatible secret shares of a document into one
+    document (deduplicating matching plaintexts acting as leaf values and
+    recombining corresponding secret shares acting as leaf values).
 
     >>> data = {
     ...     'a': [True, 'v', 12],
