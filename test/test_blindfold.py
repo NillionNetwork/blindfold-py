@@ -86,18 +86,14 @@ class TestKeys(TestCase):
         """
         Test key generate, dump, JSONify, and load methods for the match operation.
         """
-        for (Key, cluster_) in [
-            (blindfold.SecretKey, cluster(1)),
-            (blindfold.SecretKey, cluster(3)),
-            (blindfold.ClusterKey, cluster(3)),
-        ]:
-            key = Key.generate(cluster_, {'match': True})
-            key_loaded = Key.load(key.dump())
-            self.assertTrue(isinstance(key, Key))
-            self.assertEqual(key_loaded, key)
+        for cluster_ in [cluster(1), cluster(3)]:
+            sk = blindfold.SecretKey.generate(cluster_, {'match': True})
+            sk_loaded = blindfold.SecretKey.load(sk.dump())
+            self.assertTrue(isinstance(sk, blindfold.SecretKey))
+            self.assertEqual(sk_loaded, sk)
 
-            key_from_json = Key.load(json.loads(json.dumps(key.dump())))
-            self.assertEqual(key_from_json, key)
+            key_from_json = blindfold.SecretKey.load(json.loads(json.dumps(sk.dump())))
+            self.assertEqual(key_from_json, sk)
 
     def test_key_operations_for_sum_with_single_node(self):
         """
@@ -214,7 +210,8 @@ class TestKeysError(TestCase):
     """
     def test_secret_key_and_cluster_key_generation_errors(self):
         """
-        Test errors in secret key generation.
+        Test errors that can occur during both secret key and cluster key
+        generation.
         """
         for Key in [
             blindfold.SecretKey,
@@ -222,7 +219,7 @@ class TestKeysError(TestCase):
         ]:
             with pytest.raises(
                 ValueError,
-                match='valid cluster configuration is required'
+                match='valid cluster configuration expected'
             ):
                 Key.generate(123, {'store': True})
 
@@ -234,7 +231,7 @@ class TestKeysError(TestCase):
 
             with pytest.raises(
                 ValueError,
-                match='valid operations specification is required'
+                match='valid operations specification expected'
             ):
                 Key.generate(cluster(1), 123)
 
@@ -268,9 +265,25 @@ class TestKeysError(TestCase):
             ):
                 Key.generate(cluster(2), {'match': True}, threshold=1)
 
+    def test_cluster_key_generation_errors(self):
+        """
+        Test errors that can occur during cluster key generation.
+        """
+        with pytest.raises(
+            ValueError,
+            match='cluster configuration must have at least two nodes'
+        ):
+            blindfold.ClusterKey.generate({'nodes': [{}]}, {'store': True})
+
+        with pytest.raises(
+            ValueError,
+            match='creation of matching-compatible cluster keys is not supported'
+        ):
+            blindfold.ClusterKey.generate({'nodes': [{}, {}]}, {'match': True})
+
     def test_public_key_generation_errors(self):
         """
-        Test errors in public key generation.
+        Test errors that can occur during public key generation.
         """
         with pytest.raises(
             ValueError,

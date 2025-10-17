@@ -3,7 +3,7 @@ Python library for working with encrypted data within nilDB queries and
 replies.
 """
 from __future__ import annotations
-from typing import Union, Optional, Sequence
+from typing import Union, Optional, Sequence, Callable
 import doctest
 import base64
 import secrets
@@ -14,67 +14,81 @@ import bcl
 import shamirs
 import pailliers
 
-_PAILLIER_KEY_LENGTH = 2048
+_PAILLIER_KEY_LENGTH: int = 2048
 """Length in bits of Paillier keys."""
 
-_SECRET_SHARED_SIGNED_INTEGER_MODULUS = (2 ** 32) + 15
+_SECRET_SHARED_SIGNED_INTEGER_MODULUS: int = (2 ** 32) + 15
 """Modulus to use for secret sharing of 32-bit signed integers."""
 
-_PLAINTEXT_SIGNED_INTEGER_MIN = -(2 ** 31)
+_PLAINTEXT_SIGNED_INTEGER_MIN: int = -(2 ** 31)
 """Minimum plaintext 32-bit signed integer value that can be encrypted."""
 
-_PLAINTEXT_SIGNED_INTEGER_MAX = (2 ** 31) - 1
+_PLAINTEXT_SIGNED_INTEGER_MAX: int = (2 ** 31) - 1
 """Maximum plaintext 32-bit signed integer value that can be encrypted."""
 
-_PLAINTEXT_STRING_BUFFER_LEN_MAX = 4096
-"""Maximum length of plaintext string values that can be encrypted."""
+_PLAINTEXT_STRING_BUFFER_LEN_MAX: int = 4096
+"""Maximum length of plaintext string value that can be encrypted."""
 
-_HASH = hashlib.sha512
+_HASH: Callable[[Union[bytes, bytearray]], hashlib._hashlib.HASH] = hashlib.sha512
 """Hash function used for HKDF and matching."""
 
-def _xor(a: bytes, b: bytes) -> bytes:
+def _xor(a: Union[bytes, bytearray], b: Union[bytes, bytearray]) -> bytes:
     """
     Return the bitwise XOR of two arrays of bytes.
     """
     return bytes(a_i ^ b_i for (a_i, b_i) in zip(a, b))
 
-def _hkdf_extract(salt: bytes, input_key: bytes) -> bytes:
+def _hkdf_extract(
+        key: Union[bytes, bytearray],
+        salt: Optional[Union[bytes, bytearray]] = None,
+    ) -> bytes:
     """
-    Extracts a pseudorandom key (PRK) using HMAC with the given salt and input key material.
-    If the salt is empty, a zero-filled byte string of the same length as the hash function's
-    digest size is used.
+    Extract a pseudorandom key (PRK) using HMAC with the given input key
+    material and salt. If the salt is empty, a zero-filled byte string (of
+    the same length as the hash function's digest) is used.
     """
-    if len(salt) == 0:
-        salt = bytes([0] * _HASH().digest_size)
+    return hmac.new(
+        bytes([0] * _HASH().digest_size) if salt is None else salt,
+        key,
+        _HASH
+    ).digest()
 
-    return hmac.new(salt, input_key, _HASH).digest()
-
-def _hkdf_expand(pseudo_random_key: bytes, info: bytes, length: int) -> bytes:
+def _hkdf_expand(
+        length: int,
+        pseudorandom_key: Union[bytes, bytearray],
+        info: Optional[Union[bytes, bytearray]] = None
+    ) -> bytes:
     """
-    Expands the pseudo_random_key into an output key material (OKM) of the desired length using
-    HMAC-based expansion.
+    Expand the supplied pseudorandom key into output key material (OKM) of
+    the specified length using HMAC-based expansion.
     """
+    info = b'' if info is None else info
     t = b''
     okm = b''
     i = 0
     while len(okm) < length:
         i += 1
-        t = hmac.new(pseudo_random_key, t + info + bytes([i]), _HASH).digest()
+        t = hmac.new(pseudorandom_key, t + info + bytes([i]), _HASH).digest()
         okm += t
 
     return okm[:length]
 
-def _hkdf(length: int, input_key: bytes, salt: bytes = b'', info: bytes = b'') -> bytes:
+def _hkdf(
+        length: int,
+        key: Union[bytes, bytearray],
+        salt: Optional[Union[bytes, bytearray]] = None,
+        info: Optional[Union[bytes, bytearray]] = None
+    ) -> bytes:
     """
-    Extract a pseudorandom key of `length` from `input_key` and optionally `salt` and `info`.
+    Extract a pseudorandom key of ``length`` from ``key`` (and optionally also
+    from ``salt`` and ``info``).
     """
-    prk = _hkdf_extract(salt, input_key)
-    return _hkdf_expand(prk, info, length)
+    return _hkdf_expand(length, _hkdf_extract(key, salt), info)
 
 def _random_bytes(
         length: int,
-        seed: Optional[bytes] = None,
-        salt: Optional[bytes] = None
+        seed: Optional[Union[bytes, bytearray]] = None,
+        salt: Optional[Union[bytes, bytearray]] = None
     ) -> bytes:
     """
     Return a random :obj:`bytes` value of the specified length (using
@@ -88,7 +102,7 @@ def _random_bytes(
 def _random_int(
         minimum: int,
         maximum: int,
-        seed: Optional[bytes] = None
+        seed: Optional[Union[bytes, bytearray]] = None
     ) -> int:
     """
     Return a random integer value within the specified range (using
@@ -134,7 +148,7 @@ def _random_int(
 
     return minimum + secrets.randbelow(maximum + 1 - minimum)
 
-def _pack(b: bytes) -> str:
+def _pack(b: Union[bytes, bytearray]) -> str:
     """
     Encode a bytes-like object as a Base64 string (for compatibility with JSON).
     """
@@ -146,7 +160,7 @@ def _unpack(s: str) -> bytes:
     """
     return base64.b64decode(s)
 
-def _encode(value: Union[int, str, bytes]) -> bytes:
+def _encode(value: Union[int, str, bytes, bytearray]) -> bytes:
     """
     Encode an integer, string, or binary plaintext as a binary value.
     The encoding includes information about the type of the value in
@@ -157,6 +171,8 @@ def _encode(value: Union[int, str, bytes]) -> bytes:
     >>> _encode('abc').hex()
     '01616263'
     >>> _encode(bytes([1, 2, 3])).hex()
+    '02010203'
+    >>> _encode(bytearray([1, 2, 3])).hex()
     '02010203'
 
     If a value cannot be encoded, an exception is raised.
@@ -175,12 +191,12 @@ def _encode(value: Union[int, str, bytes]) -> bytes:
     if isinstance(value, str):
         return bytes([1]) + value.encode('UTF-8')
 
-    if isinstance(value, bytes):
+    if isinstance(value, (bytes, bytearray)):
         return bytes([2]) + value
 
     raise ValueError('cannot encode value')
 
-def _decode(value: bytes) -> Union[int, str, bytes]:
+def _decode(value: Union[bytes, bytearray]) -> Union[int, str, bytes]:
     """
     Decode a binary value back into an integer, string, or binary plaintext.
 
@@ -190,20 +206,22 @@ def _decode(value: bytes) -> Union[int, str, bytes]:
     'abc'
     >>> _decode(_encode(bytes([1, 2, 3])))
     b'\\x01\\x02\\x03'
+    >>> _decode(_encode(bytearray([1, 2, 3])))
+    b'\\x01\\x02\\x03'
 
     If a value cannot be decoded, an exception is raised.
 
     >>> _decode([1, 2, 3])
     Traceback (most recent call last):
       ...
-    TypeError: can only decode from a bytes value
+    TypeError: value must be a bytes-like object
     >>> _decode(bytes([3]))
     Traceback (most recent call last):
       ...
     ValueError: cannot decode value
     """
-    if not isinstance(value, bytes):
-        raise TypeError('can only decode from a bytes value')
+    if not isinstance(value, (bytes, bytearray)):
+        raise TypeError('value must be a bytes-like object')
 
     if value[0] == 0: # Indicates encoded value is a 32-bit signed integer.
         integer = int.from_bytes(value[1:], 'little')
@@ -222,7 +240,7 @@ class SecretKey(dict):
     Data structure for representing all categories of secret key instances.
     """
 
-    _paillier_key_length = _PAILLIER_KEY_LENGTH
+    _paillier_key_length: int = _PAILLIER_KEY_LENGTH
     """
     Static parameter for Paillier cryptosystem (introduced in order to allow
     modification in tests).
@@ -230,10 +248,10 @@ class SecretKey(dict):
 
     @staticmethod
     def generate(
-        cluster: dict = None,
-        operations: dict = None,
+        cluster: dict,
+        operations: dict,
         threshold: Optional[int] = None,
-        seed: Union[bytes, bytearray, str] = None
+        seed: Optional[Union[bytes, bytearray, str]] = None
     ) -> SecretKey:
         """
         Return a secret key built according to what is specified in the supplied
@@ -243,9 +261,13 @@ class SecretKey(dict):
         >>> isinstance(sk, SecretKey)
         True
 
-        Supplying an invalid combination of configurations and/or parameters raises
-        a corresponding exception.
+        Supplying an invalid combination of configurations and/or parameters
+        raises a corresponding exception.
 
+        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, seed={})
+        Traceback (most recent call last):
+          ...
+        TypeError: seed must be a bytes-like object or a string
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold='abc')
         Traceback (most recent call last):
           ...
@@ -269,34 +291,18 @@ class SecretKey(dict):
         >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, seed=bytes([123]))
         Traceback (most recent call last):
           ...
-        ValueError: seed-based derivation of summation-compatible keys is not supported \
-for single-node clusters
+        ValueError: seed-based ... summation-compatible ... not supported for single-node ...
         """
-        # Normalize type of seed argument.
-        if isinstance(seed, str):
-            seed = seed.encode()
-
-        # Create instance with default cluster configuration and operations
-        # specification, updating the configuration and specification with the
-        # supplied arguments.
-        secret_key = SecretKey({
-            'material': {},
-            'cluster': cluster,
-            'operations': operations
-        })
-        if threshold is not None:
-            secret_key['threshold'] = threshold
-
         if (
             not isinstance(cluster, dict) or
             'nodes' not in cluster or
             not isinstance(cluster['nodes'], Sequence)
         ):
-            raise ValueError('valid cluster configuration is required')
+            raise ValueError('valid cluster configuration expected')
 
         # Store the cluster size as specified in the supplied key to allow for
         # more concise code below.
-        cluster_size = len(secret_key['cluster']['nodes'])
+        cluster_size = len(cluster['nodes'])
 
         if cluster_size < 1:
             raise ValueError('cluster configuration must contain at least one node')
@@ -305,9 +311,9 @@ for single-node clusters
             (not isinstance(operations, dict)) or
             (not set(operations.keys()).issubset({'store', 'match', 'sum'}))
         ):
-            raise ValueError('valid operations specification is required')
+            raise ValueError('valid operations specification expected')
 
-        if len([op for (op, status) in secret_key['operations'].items() if status]) != 1:
+        if len([op for (op, status) in operations.items() if status]) != 1:
             raise ValueError('secret key must support exactly one operation')
 
         if threshold is not None:
@@ -322,12 +328,30 @@ for single-node clusters
                     'thresholds are only supported for multiple-node clusters'
                 )
             if (
-                not secret_key['operations'].get('store') and
-                not secret_key['operations'].get('sum')
+                not operations.get('store') and
+                not operations.get('sum')
             ):
                 raise ValueError(
                     'thresholds are only supported for the store and sum operations'
                 )
+
+        if seed is not None and not isinstance(seed, (bytes, bytearray, str)):
+            raise TypeError('seed must be a bytes-like object or a string')
+
+        # Normalize type of seed argument.
+        if isinstance(seed, str):
+            seed = seed.encode()
+
+        # Create instance with default cluster configuration and operations
+        # specification, updating the configuration and specification with the
+        # supplied arguments.
+        secret_key = SecretKey({
+            'material': {},
+            'cluster': cluster,
+            'operations': operations
+        })
+        if threshold is not None:
+            secret_key['threshold'] = threshold
 
         if secret_key['operations'].get('store'):
             # Symmetric key for encrypting the plaintext or the shares of a plaintext.
@@ -367,10 +391,14 @@ for single-node clusters
 
         return secret_key
 
-    def _modulus(self: SecretKey) -> int:
+    def _modulus(self: SecretKey, silent: bool = False) -> int:
         """
         Return the modulus governing the domain of plaintexts of the Paillier,
         additive, or Shamir's scheme corresponding to this key instance.
+
+        The optional argument ``silent`` can be used to ensure this method
+        returns ``None`` if the scheme associated with a key instance has no
+        modulus.
 
         >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, 2)
         >>> isinstance(sk._modulus(), int)
@@ -384,9 +412,14 @@ for single-node clusters
         >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, 2)
         >>> isinstance(sk._modulus(), int)
         True
+        >>> SecretKey.generate(
+        ...     {'nodes': [{}]},
+        ...     {'store': True}
+        ... )._modulus(True) is None
+        True
 
-        If the scheme associated with a key instance has no modulus, an
-        exception is raised.
+        If the ``silent`` argument is not ``True`` and no modulus is associated
+        with this instance, an exception is raised.
 
         >>> SecretKey.generate({'nodes': [{}]}, {'store': True})._modulus()
         Traceback (most recent call last):
@@ -410,6 +443,9 @@ for single-node clusters
                 if len(self['cluster']['nodes']) == 1 else
                 _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
+
+        if silent:
+            return None
 
         raise ValueError('scheme associated with key has no modulus')
 
@@ -457,7 +493,17 @@ for single-node clusters
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
         >>> sk == SecretKey.load(sk.dump())
         True
+
+        Any attempt to supply an invalid input raises an exception.
+
+        >>> SecretKey.load('abc')
+        Traceback (most recent call last):
+          ...
+        TypeError: dictionary expected
         """
+        if not isinstance(dictionary, dict):
+            raise TypeError('dictionary expected')
+
         secret_key = SecretKey({
             'material': {},
             'cluster': dictionary['cluster'],
@@ -499,8 +545,8 @@ class ClusterKey(SecretKey):
     """
     @staticmethod
     def generate( # pylint: disable=arguments-differ # Seeds not supported.
-        cluster: dict = None,
-        operations: dict = None,
+        cluster: dict,
+        operations: dict,
         threshold: Optional[int] = None
     ) -> ClusterKey:
         """
@@ -511,20 +557,31 @@ class ClusterKey(SecretKey):
         >>> isinstance(ck, ClusterKey)
         True
 
-        Cluster keys can only be created for clusters that have two or more nodes.
+        Cluster keys can only be created for clusters that have two or more
+        nodes and can only enable encryption for storage and summation
+        compatibility.
 
         >>> ClusterKey.generate({'nodes': [{}]}, {'store': True})
         Traceback (most recent call last):
           ...
         ValueError: cluster configuration must have at least two nodes
+        >>> ClusterKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
+        Traceback (most recent call last):
+          ...
+        ValueError: creation of matching-compatible cluster keys is not supported
         """
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
         cluster_key = ClusterKey(SecretKey.generate(cluster, operations, threshold))
 
-        if len(cluster_key['cluster']['nodes']) == 1:
+        if len(cluster['nodes']) == 1:
             raise ValueError('cluster configuration must have at least two nodes')
+
+        if operations.get('match'):
+            raise ValueError(
+                'creation of matching-compatible cluster keys is not supported'
+            )
 
         # Cluster keys contain no cryptographic material.
         if 'material' in cluster_key:
@@ -562,7 +619,17 @@ class ClusterKey(SecretKey):
         >>> ck = ClusterKey.generate(cluster, {'sum': True}, threshold=2)
         >>> ck == ClusterKey.load(ck.dump())
         True
+
+        Any attempt to supply an invalid input raises an exception.
+
+        >>> ClusterKey.load('abc')
+        Traceback (most recent call last):
+          ...
+        TypeError: dictionary expected
         """
+        if not isinstance(dictionary, dict):
+            raise TypeError('dictionary expected')
+
         cluster_key = ClusterKey({
             'cluster': dictionary['cluster'],
             'operations': dictionary['operations'],
@@ -585,7 +652,23 @@ class PublicKey(dict):
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(PublicKey.generate(sk), PublicKey)
         True
+
+        A public key can only be created from a compatible secret key.
+
+        >>> ck = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
+        >>> PublicKey.generate(ck)
+        Traceback (most recent call last):
+          ...
+        ValueError: cannot create public key for supplied secret key
+        >>> ck = ClusterKey.generate({'nodes': [{}, {}]}, {'sum': True})
+        >>> PublicKey.generate(ck)
+        Traceback (most recent call last):
+          ...
+        TypeError: secret key expected
         """
+        if isinstance(secret_key, ClusterKey) or not isinstance(secret_key, SecretKey):
+            raise TypeError('secret key expected')
+
         # Create instance with default cluster configuration and operations
         # specification, updating the configuration and specification with the
         # supplied arguments.
@@ -627,7 +710,7 @@ class PublicKey(dict):
         return dictionary
 
     @staticmethod
-    def load(dictionary: PublicKey) -> dict:
+    def load(dictionary: dict) -> PublicKey:
         """
         Return an instance built from a JSON-compatible dictionary
         representation.
@@ -636,7 +719,17 @@ class PublicKey(dict):
         >>> pk = PublicKey.generate(sk)
         >>> pk == PublicKey.load(pk.dump())
         True
+
+        Any attempt to supply an invalid input raises an exception.
+
+        >>> PublicKey.load('abc')
+        Traceback (most recent call last):
+          ...
+        TypeError: dictionary expected
         """
+        if not isinstance(dictionary, dict):
+            raise TypeError('dictionary expected')
+
         public_key = PublicKey({
             'cluster': dictionary['cluster'],
             'operations': dictionary['operations'],
@@ -654,8 +747,8 @@ class PublicKey(dict):
         return public_key
 
 def encrypt(
-        key: Union[SecretKey, PublicKey],
-        plaintext: Union[int, str, bytes]
+        key: Union[SecretKey, ClusterKey, PublicKey],
+        plaintext: Union[int, str, bytes, bytearray]
     ) -> Union[str, Sequence[str], Sequence[int], Sequence[Sequence[int]]]:
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
@@ -683,8 +776,16 @@ def encrypt(
     Invocations that involve invalid argument values or types may raise an
     exception.
 
+    >>> encrypt('abc', 123)
+    Traceback (most recent call last):
+      ...
+    TypeError: secret key, cluster key, or public key expected
     >>> key = SecretKey.generate({'nodes': [{}]}, {'sum': True})
-    >>> encrypt(key, [])
+    >>> encrypt(key, {})
+    Traceback (most recent call last):
+      ...
+    TypeError: plaintext must be string, integer, or bytes-like object
+    >>> encrypt(key, 'abc')
     Traceback (most recent call last):
       ...
     TypeError: plaintext to encrypt for sum operation must be an integer
@@ -698,12 +799,15 @@ def encrypt(
       ...
     ValueError: cannot encrypt the supplied plaintext using the supplied key
     """
+    if not isinstance(key, (SecretKey, ClusterKey, PublicKey)):
+        raise TypeError('secret key, cluster key, or public key expected')
+
     # Local variable for the encoded binary representation of the plaintext.
     # This variable may or may not be used depending on the type of key supplied.
     buffer = None
 
     # Encode string or binary data for storage or matching.
-    if isinstance(plaintext, (str, bytes)):
+    if isinstance(plaintext, (str, bytes, bytearray)):
         buffer = _encode(plaintext)
         if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
             raise ValueError(
@@ -713,7 +817,7 @@ def encrypt(
             )
 
     # Encode integer data for storage or matching.
-    if isinstance(plaintext, int):
+    elif isinstance(plaintext, int):
         # Only 32-bit signed integer plaintexts are supported.
         if (
             plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
@@ -723,6 +827,12 @@ def encrypt(
 
         # Encode an integer for storage or matching.
         buffer = _encode(plaintext)
+
+    # Invalid plaintext.
+    else:
+        raise TypeError(
+            'plaintext must be string, integer, or bytes-like object'
+        )
 
     # Encrypt a plaintext for storage and retrieval.
     if key['operations'].get('store'):
@@ -869,7 +979,7 @@ def encrypt(
     raise ValueError('cannot encrypt the supplied plaintext using the supplied key')
 
 def decrypt(
-        key: SecretKey,
+        key: Union[SecretKey, ClusterKey],
         ciphertext: Union[str, Sequence[str], Sequence[int], Sequence[Sequence[int]]]
     ) -> Union[int, str, bytes]:
     """
@@ -953,6 +1063,10 @@ def decrypt(
     supplied key (*e.g.*, because one or both are malformed or they are
     incompatible).
 
+    >>> decrypt('abc', 123)
+    Traceback (most recent call last):
+      ...
+    TypeError: secret key or cluster key expected
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
@@ -971,6 +1085,9 @@ def decrypt(
       ...
     ValueError: cannot decrypt the supplied ciphertext using the supplied key
     """
+    if not isinstance(key, (SecretKey, ClusterKey)):
+        raise TypeError('secret key or cluster key expected')
+
     error = ValueError(
         'cannot decrypt the supplied ciphertext using the supplied key'
     )
@@ -1282,9 +1399,9 @@ def allot(
     )
 
 def unify(
-        secret_key: SecretKey,
+        key: Union[SecretKey, ClusterKey],
         documents: Sequence[Union[int, bool, str, list, dict]],
-        ignore: Sequence[str] = None
+        ignore: Optional[Sequence[str]] = None
     ) -> Union[int, bool, str, list, dict]:
     """
     Combine a sequence of compatible secret shares of a document into one
@@ -1332,8 +1449,9 @@ def unify(
     >>> data == decrypted
     True
 
-    The ``ignore`` parameter specifies which keys should be ignored during
-    unification. By default, ``'_created'`` and ``'_updated'`` are ignored.
+    The ``ignore`` parameter specifies which dictionary keys should be ignored
+    during unification. By default, ``'_created'`` and ``'_updated'`` are
+    ignored.
 
     >>> shares[0]['_created'] = '123'
     >>> shares[1]['_created'] = '456'
@@ -1352,13 +1470,39 @@ def unify(
 
     Any attempt to supply incompatible document shares raises an exception.
 
+    >>> unify('abc', [])
+    Traceback (most recent call last):
+      ...
+    TypeError: secret key or cluster key expected
+    >>> unify(sk, 123)
+    Traceback (most recent call last):
+      ...
+    TypeError: sequence of documents expected
     >>> unify(sk, [123, 'abc'])
     Traceback (most recent call last):
       ...
-    TypeError: array of compatible document shares expected
+    TypeError: sequence of compatible document shares expected
+    >>> unify(sk, [123, 123], 456)
+    Traceback (most recent call last):
+      ...
+    TypeError: ignored keys must be supplied as a sequence of strings
     """
+    if not isinstance(key, (SecretKey, ClusterKey)):
+        raise TypeError('secret key or cluster key expected')
+
+    if not isinstance(documents, Sequence):
+        raise TypeError('sequence of documents expected')
+
     if ignore is None:
         ignore = ['_created', '_updated']
+    else:
+        if (
+            not isinstance(ignore, Sequence) or
+            not all(isinstance(k, str) for k in ignore)
+        ):
+            raise TypeError(
+                'ignored keys must be supplied as a sequence of strings'
+            )
 
     if len(documents) == 1:
         return documents[0]
@@ -1367,7 +1511,7 @@ def unify(
         length = len(documents[0])
         if all(len(document) == length for document in documents[1:]):
             return [
-                unify(secret_key, [share[i] for share in documents], ignore)
+                unify(key, [share[i] for share in documents], ignore)
                 for i in range(length)
             ]
 
@@ -1381,14 +1525,14 @@ def unify(
                 all(isinstance(d['%share'], str) for d in documents)
             ):
                 return decrypt(
-                    secret_key,
+                    key,
                     [document['%share'] for document in documents]
                 )
 
             # Document shares consisting of nested lists of shares.
             return [
                 unify(
-                    secret_key,
+                    key,
                     [{'%share': share} for share in shares],
                     ignore
                 )
@@ -1396,16 +1540,16 @@ def unify(
             ]
 
         # Documents are general-purpose key-value mappings.
-        keys = documents[0].keys()
-        if all(document.keys() == keys for document in documents[1:]):
-            # For ignored keys, unification is not performed and
+        ks = documents[0].keys()
+        if all(document.keys() == ks for document in documents[1:]):
+            # For ignored attributes, unification is not performed and
             # they are omitted from the results.
-            keys = [key for key in keys if key not in ignore]
+            ks = [k for k in ks if k not in ignore]
             results = {}
-            for key in keys:
-                results[key] = unify(
-                    secret_key,
-                    [document[key] for document in documents],
+            for k in ks:
+                results[k] = unify(
+                    key,
+                    [document[k] for document in documents],
                     ignore
                 )
 
@@ -1419,7 +1563,7 @@ def unify(
     if all_values_equal:
         return documents[0]
 
-    raise TypeError('array of compatible document shares expected')
+    raise TypeError('sequence of compatible document shares expected')
 
 if __name__ == '__main__':
     doctest.testmod() # pragma: no cover
