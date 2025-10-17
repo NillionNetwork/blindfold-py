@@ -47,7 +47,8 @@ extensions = [
     'sphinx.ext.doctest',
     'sphinx.ext.napoleon',
     'sphinx.ext.intersphinx',
-    'sphinx.ext.viewcode'
+    'sphinx.ext.viewcode',
+    'sphinx_autodoc_typehints'
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -74,6 +75,8 @@ autodoc_default_options = {
     ])
 }
 autodoc_preserve_defaults = True
+autodoc_typehints = 'description'
+autodoc_typehints_description_target = 'documented'
 
 # Allow references/links to definitions found in the Python documentation.
 intersphinx_mapping = {

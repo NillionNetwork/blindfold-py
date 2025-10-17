@@ -35,6 +35,9 @@ _HASH: Callable[[Union[bytes, bytearray]], hashlib._hashlib.HASH] = hashlib.sha5
 def _xor(a: Union[bytes, bytearray], b: Union[bytes, bytearray]) -> bytes:
     """
     Return the bitwise XOR of two arrays of bytes.
+
+    :param a: First argument.
+    :param b: Second argument.
     """
     return bytes(a_i ^ b_i for (a_i, b_i) in zip(a, b))
 
@@ -46,6 +49,9 @@ def _hkdf_extract(
     Extract a pseudorandom key (PRK) using HMAC with the given input key
     material and salt. If the salt is empty, a zero-filled byte string (of
     the same length as the hash function's digest) is used.
+
+    :param key: Initial key material.
+    :param salt: Additional salt to incorporate during extraction.
     """
     return hmac.new(
         bytes([0] * _HASH().digest_size) if salt is None else salt,
@@ -61,6 +67,10 @@ def _hkdf_expand(
     """
     Expand the supplied pseudorandom key into output key material (OKM) of
     the specified length using HMAC-based expansion.
+
+    :param length: Target length of output key.
+    :param pseudorandom_key: Pseudorandom key to expand.
+    :param info: Additional binary data to incorporate during expansion.
     """
     info = b'' if info is None else info
     t = b''
@@ -82,6 +92,11 @@ def _hkdf(
     """
     Extract a pseudorandom key of ``length`` from ``key`` (and optionally also
     from ``salt`` and ``info``).
+
+    :param length: Target length of output key.
+    :param key: Pseudorandom key to expand.
+    :param salt: Additional salt to incorporate during extraction.
+    :param info: Additional binary data to incorporate.
     """
     return _hkdf_expand(length, _hkdf_extract(key, salt), info)
 
@@ -93,6 +108,10 @@ def _random_bytes(
     """
     Return a random :obj:`bytes` value of the specified length (using
     the seed if one is supplied).
+
+    :param length: Target length of random :obj:`bytes` value.
+    :param seed: Seed from which to deterministically derive the result.
+    :param salt: Salt to use during deterministic derivation.
     """
     if seed is not None:
         return _hkdf(length, seed, b'' if salt is None else salt)
@@ -108,6 +127,13 @@ def _random_int(
     Return a random integer value within the specified range (using
     the seed if one is supplied) by leveraging rejection sampling.
     
+    :param minimum: Minimum permitted integer value (inclusive).
+    :param maximum: Maximum permitted integer value (inclusive).
+    :param seed: Seed from which to deterministically derive the result.
+
+    This function relies on rejection sampling both in its implementation and
+    indirectly via :obj:`random.randbelow`.
+
     >>> _random_int(-1, 1)
     Traceback (most recent call last):
       ...
@@ -151,18 +177,26 @@ def _random_int(
 def _pack(b: Union[bytes, bytearray]) -> str:
     """
     Encode a bytes-like object as a Base64 string (for compatibility with JSON).
+
+    :param b: Data to encode.
     """
     return base64.b64encode(b).decode('ascii')
 
 def _unpack(s: str) -> bytes:
     """
     Decode a bytes-like object from its Base64 string encoding.
+
+    :param s: String to decode.
     """
     return base64.b64decode(s)
 
 def _encode(value: Union[int, str, bytes, bytearray]) -> bytes:
     """
-    Encode an integer, string, or binary plaintext as a binary value.
+    Encode an integer, string, or binary plaintext as a binary value
+    (keeping track of type information in the first byte).
+
+    :param value: Value to encode as binary data.
+
     The encoding includes information about the type of the value in
     the first byte (to enable decoding without any additional context).
 
@@ -199,6 +233,10 @@ def _encode(value: Union[int, str, bytes, bytearray]) -> bytes:
 def _decode(value: Union[bytes, bytearray]) -> Union[int, str, bytes]:
     """
     Decode a binary value back into an integer, string, or binary plaintext.
+
+    :param value: Binary data to decode into a value.
+
+    This function complements :obj:`_encode`.
 
     >>> _decode(_encode(123))
     123
@@ -256,6 +294,16 @@ class SecretKey(dict):
         """
         Return a secret key built according to what is specified in the supplied
         cluster configuration, operation specification, and other parameters.
+
+        :param cluster: Cluster configuration for this key.
+        :param operations: Specification of supported operations on ciphertexts.
+        :param threshold: Minimum number of parties required to decrypt a
+            ciphertext.
+        :param seed: Seed from which to deterministically derive cryptographic
+            material.
+
+        The supplied arguments determine which encryption protocol is used when
+        encrypting ciphertexts with this key.
 
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(sk, SecretKey)
@@ -327,10 +375,7 @@ class SecretKey(dict):
                 raise ValueError(
                     'thresholds are only supported for multiple-node clusters'
                 )
-            if (
-                not operations.get('store') and
-                not operations.get('sum')
-            ):
+            if (not operations.get('store')) and (not operations.get('sum')):
                 raise ValueError(
                     'thresholds are only supported for the store and sum operations'
                 )
@@ -396,6 +441,8 @@ class SecretKey(dict):
         Return the modulus governing the domain of plaintexts of the Paillier,
         additive, or Shamir's scheme corresponding to this key instance.
 
+        :param silent: Return ``None`` if there is no associated modulus.
+
         The optional argument ``silent`` can be used to ensure this method
         returns ``None`` if the scheme associated with a key instance has no
         modulus.
@@ -452,12 +499,7 @@ class SecretKey(dict):
     def dump(self: SecretKey) -> dict:
         """
         Return a JSON-compatible dictionary representation of this key
-        instance.
-
-        >>> import json
-        >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
-        >>> isinstance(json.dumps(sk.dump()), str)
-        True
+        instance. This method complements the :obj:`load` method.
         """
         dictionary = {
             'material': {},
@@ -490,8 +532,15 @@ class SecretKey(dict):
         Return an instance built from a JSON-compatible dictionary
         representation.
 
+        :param dictionary: Dictionary representation of a secret key.
+
+        This method complements the :obj:`dump` method and also makes it
+        possible to work with JSON representations of keys.
+
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
-        >>> sk == SecretKey.load(sk.dump())
+        >>> import json
+        >>> sk_json = json.dumps(sk.dump())
+        >>> sk == SecretKey.load(json.loads(sk_json))
         True
 
         Any attempt to supply an invalid input raises an exception.
@@ -553,6 +602,14 @@ class ClusterKey(SecretKey):
         Return a cluster key built according to what is specified in the supplied
         cluster configuration and operation specification.
 
+        :param cluster: Cluster configuration for this key.
+        :param operations: Specification of supported operations on ciphertexts.
+        :param threshold: Minimum number of parties required to decrypt a
+            ciphertext.
+
+        The supplied arguments determine which encryption protocol is used when
+        encrypting ciphertexts with this key.
+
         >>> ck = ClusterKey.generate({'nodes': [{}, {}, {}]}, {'sum': True})
         >>> isinstance(ck, ClusterKey)
         True
@@ -592,13 +649,7 @@ class ClusterKey(SecretKey):
     def dump(self: ClusterKey) -> dict:
         """
         Return a JSON-compatible dictionary representation of this key
-        instance.
-
-        >>> import json
-        >>> cluster = {'nodes': [{}, {}, {}]}
-        >>> ck = ClusterKey.generate(cluster, {'sum': True}, threshold=2)
-        >>> isinstance(json.dumps(ck.dump()), str)
-        True
+        instance. This method complements the :obj:`load` method.
         """
         dictionary = {
             'cluster': self['cluster'],
@@ -615,9 +666,16 @@ class ClusterKey(SecretKey):
         Return an instance built from a JSON-compatible dictionary
         representation.
 
+        :param dictionary: Dictionary representation of a cluster key.
+
+        This method complements the :obj:`dump` method and also makes it
+        possible to work with JSON representations of keys.
+
         >>> cluster = {'nodes': [{}, {}, {}]}
         >>> ck = ClusterKey.generate(cluster, {'sum': True}, threshold=2)
-        >>> ck == ClusterKey.load(ck.dump())
+        >>> import json
+        >>> ck_json = json.dumps(ck.dump())
+        >>> ck == ClusterKey.load(json.loads(ck_json))
         True
 
         Any attempt to supply an invalid input raises an exception.
@@ -649,12 +707,13 @@ class PublicKey(dict):
         Return a public key built according to what is specified in the supplied
         secret key.
 
+        :param secret_key: Secret key from which to derive this public key.
+
+        A public key can only be derived from a compatible secret key.
+
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> isinstance(PublicKey.generate(sk), PublicKey)
         True
-
-        A public key can only be created from a compatible secret key.
-
         >>> ck = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
         >>> PublicKey.generate(ck)
         Traceback (most recent call last):
@@ -687,13 +746,7 @@ class PublicKey(dict):
     def dump(self: PublicKey) -> dict:
         """
         Return a JSON-compatible dictionary representation of this key
-        instance.
-
-        >>> import json
-        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
-        >>> pk = PublicKey.generate(sk)
-        >>> isinstance(json.dumps(pk.dump()), str)
-        True
+        instance. This method complements the :obj:`load` method.
         """
         dictionary = {
             'material': {},
@@ -715,8 +768,15 @@ class PublicKey(dict):
         Return an instance built from a JSON-compatible dictionary
         representation.
 
+        :param dictionary: Dictionary representation of a public key.
+
+        This method complements the :obj:`dump` method and also makes it
+        possible to work with JSON representations of keys.
+
         >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
         >>> pk = PublicKey.generate(sk)
+        >>> import json
+        >>> pk_json = json.dumps(pk.dump())
         >>> pk == PublicKey.load(pk.dump())
         True
 
@@ -753,6 +813,11 @@ def encrypt(
     """
     Return the ciphertext obtained by using the supplied key to encrypt the
     supplied plaintext.
+
+    :param key: Key to use for performing encryption.
+    :param plaintext: Plaintext to encrypt.
+
+    The supplied key determines which protocol is used to perform the encryption.
 
     >>> sk = SecretKey.generate({'nodes': [{}]}, {'store': True})
     >>> len(encrypt(sk, 'abc'))
@@ -985,6 +1050,11 @@ def decrypt(
     """
     Return the plaintext obtained by using the supplied key to decrypt the
     supplied ciphertext.
+
+    :param key: Key to use for performing decryption.
+    :param ciphertext: Ciphertext to decrypt.
+
+    The supplied key determines which protocol is used to perform the decryption.
 
     >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key, encrypt(key, 123))
@@ -1271,8 +1341,14 @@ def allot(
     ) -> Sequence[Union[int, bool, str, list, dict]]:
     """
     Convert a document that may contain ciphertexts intended for multiple-node
-    clusters into secret shares of that document. Shallow copies are created
-    whenever possible.
+    clusters into secret shares of that document.
+
+    :param document: Document to convert into secret shares.
+
+    The output consists of a sequence of documents; the number of documents in
+    the sequence is determined by the number of secret shares that appear in
+    ciphertext values found in the document. Shallow copies are created whenever
+    possible.
 
     >>> d = {
     ...     'id': 0,
@@ -1405,8 +1481,15 @@ def unify(
     ) -> Union[int, bool, str, list, dict]:
     """
     Combine a sequence of compatible secret shares of a document into one
-    document (deduplicating matching plaintexts acting as leaf values and
-    recombining corresponding secret shares acting as leaf values).
+    document.
+
+    :param key: Key with which to reconstruct leaf values from secret shares.
+    :param documents: Sequence of document secret shares to combine.
+    :param ignore: Sequence of dictionary keys to ignore. 
+
+    Corresponding plaintexts acting as leaf values are deduplicated and 
+    corresponding secret shares acting as leaf values are used to reconstruct
+    plaintexts that appear in the resulting document.
 
     >>> data = {
     ...     'a': [True, 'v', 12],
