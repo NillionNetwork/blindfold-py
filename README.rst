@@ -43,29 +43,29 @@ The library can be imported in the usual manner:
 
 Supported Protocols
 ^^^^^^^^^^^^^^^^^^^
-The table below summarizes the data encryption protocols that this library makes available. The table also specifies which operation involving ciphertexts is supported by each protocol. Note that support for summation of encrypted data implies support both for subtraction of encrypted values from other encrypted values and for multiplication of encrypted data by a plaintext signed integer scalar.
+The table below summarizes the data encryption protocols that this library makes available. The table also specifies which operation involving ciphertexts is supported by each protocol. Note that support for summation of encrypted values implies support both for subtraction of encrypted values from other encrypted values and for multiplication of encrypted values by a plaintext signed integer scalar.
 
-+-------------+-----------+--------------------------------------------+------------------------------+
-| Cluster     | Operation | Implementation Details                     | Supported Types              |
-+=============+===========+============================================+==============================+
-|             | store     | XSalsa20 stream cipher and Poly1305 MAC    | | 32-bit signed integer or   |
-|             |           |                                            | | UTF-8 string (<4097 bytes) |
-|             +-----------+--------------------------------------------+------------------------------+
-| | single    | match     | deterministic salted hashing (SHA-512)     | | 32-bit signed integer or   |
-| | node      |           |                                            | | UTF-8 string (<4097 bytes) |
-|             +-----------+--------------------------------------------+------------------------------+
-|             | sum       | Paillier cryptosystem (2048-bit primes)    | 32-bit signed integer        |
-|             |           |                                            |                              |
-+-------------+-----------+--------------------------------------------+------------------------------+
-|             | store     | | XOR-based secret sharing or              | | 32-bit signed integer or   |
-|             |           | | Shamir's secret sharing (with threshold) | | UTF-8 string (<4097 bytes) |
-|             +-----------+--------------------------------------------+------------------------------+
-| | multiple  | match     | deterministic salted hashing (SHA-512)     | | 32-bit signed integer or   |
-| | nodes     |           |                                            | | UTF-8 string (<4097 bytes) |
-|             +-----------+--------------------------------------------+------------------------------+
-|             | sum       | | additive secret sharing or               | 32-bit signed integer        |
-|             |           | | Shamir's secret sharing (with threshold) |                              |
-+-------------+-----------+--------------------------------------------+------------------------------+
++------------+-----------+--------------------------------------------+------------------------------+
+| Cluster    | Operation | Implementation Details                     | Supported Types              |
++============+===========+============================================+==============================+
+|            | store     | XSalsa20 stream cipher and Poly1305 MAC    | | 32-bit signed integer or   |
+|            |           |                                            | | UTF-8 string (<4097 bytes) |
+|            +-----------+--------------------------------------------+------------------------------+
+| | single   | match     | deterministic salted hashing (SHA-512)     | | 32-bit signed integer or   |
+| | node     |           |                                            | | UTF-8 string (<4097 bytes) |
+|            +-----------+--------------------------------------------+------------------------------+
+|            | sum       | Paillier cryptosystem (2048-bit primes)    | 32-bit signed integer        |
+|            |           |                                            |                              |
++------------+-----------+--------------------------------------------+------------------------------+
+|            | store     | | XOR-based secret sharing or              | | 32-bit signed integer or   |
+|            |           | | Shamir's secret sharing (with threshold) | | UTF-8 string (<4097 bytes) |
+|            +-----------+--------------------------------------------+------------------------------+
+| | multiple | match     | deterministic salted hashing (SHA-512)     | | 32-bit signed integer or   |
+| | nodes    |           |                                            | | UTF-8 string (<4097 bytes) |
+|            +-----------+--------------------------------------------+------------------------------+
+|            | sum       | | additive secret sharing or               | 32-bit signed integer        |
+|            |           | | Shamir's secret sharing (with threshold) |                              |
++------------+-----------+--------------------------------------------+------------------------------+
 
 Categories of Encryption Keys
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -90,6 +90,34 @@ More Details on Secret Sharing
 When working with multiple-node clusters and encrypting data for compatibility with the store operation using a |SecretKey|_ instance, each secret share is encrypted  using a symmetric key (the material for which is stored inside the |SecretKey|_ instance). However, when encrypting for compatibility with the sum operation (without or with a threshold), each secret share is instead *masked* via multiplication with a secret nonzero scalar (with one secret scalar per node stored in the |SecretKey|_ instance). While this ensures that the secret-shared plaintexts encrypted in this way are compatible with addition and scalar multiplication, users should use this feature only if they have a thorough understanding of the privacy and security trade-offs involved.
 
 Threshold secret sharing is supported when encrypting for multiple-node clusters (with the exception of encrypting for compatibility with the match operation). A threshold specifies the minimum number of nodes required to reconstruct the original data. Shamir's secret sharing is employed when encrypting with support for a threshold, ensuring that encrypted data can only be decrypted if the required number of shares is available.
+
+Ciphertext Overheads
+^^^^^^^^^^^^^^^^^^^^
+The table below presents tight upper bounds on ciphertext sizes (in bytes) for each supported protocol when it is used to encrypt a plaintext having *k* bytes. For multiple-node protocols, the size of the ciphertext delivered to an individual node is reported (excluding any overheads associated with the container type within which separate ciphertext components such as the share index and value reside). The upper bounds below are `checked within the testing script <https://blindfold.readthedocs.io/en/0.1.0/_source/test_blindfold.html#test.test_blindfold.TestCiphertextSizes>`__.
+
++------------+---------------------+-------------------------------------------------------+-------------+
+| Cluster    | Operation           | Exact Upper Bound in Bytes                            | Approx.     |
++============+=====================+=======================================================+=============+
+|            | store               | 2 + **ceil** [(4/3)(*k* + 41)]                        | (4/3) *k*   |
+|            +---------------------+-------------------------------------------------------+-------------+
+| | single   | match               | 88                                                    | 88          |
+| | node     +---------------------+-------------------------------------------------------+-------------+
+|            | sum                 | 2048                                                  | 2048        |
++------------+---------------------+-------------------------------------------------------+-------------+
+|            | | store             | | 2 + **ceil** [(4/3)(*k* + 41)]                      | | (4/3) *k* |
+| | multiple | | store (threshold) | | 2 + **ceil** [(4/3) **ceil** [(5/4)(*k* + 4) + 45]] | | (5/3) *k* |
+| | nodes    +---------------------+-------------------------------------------------------+-------------+
+| | with     | match               | 88                                                    | 88          |
+| | secret   +---------------------+-------------------------------------------------------+-------------+
+| | key      | | sum               | | 4                                                   | | 4         |
+|            | | sum (threshold)   | | 8                                                   | | 8         |
++------------+---------------------+-------------------------------------------------------+-------------+
+| | multiple | | store             | | 2 + **ceil** ((4/3)(k + 1))                         | | (4/3) *k* |
+| | nodes    | | store (threshold) | | 2 + **ceil** [(4/3) **ceil** [(5/4)(*k* + 4) + 5]]  | | (5/3) *k* |
+| | with     +---------------------+-------------------------------------------------------+-------------+
+| | cluster  | | sum               | | 4                                                   | | 4         |
+| | key      | | sum (threshold)   | | 8                                                   | | 8         |
++------------+---------------------+-------------------------------------------------------+-------------+
 
 Examples
 ^^^^^^^^

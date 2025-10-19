@@ -7,6 +7,7 @@ from typing import Union, Set, Sequence
 from unittest import TestCase
 from importlib import import_module
 import functools
+import math
 import json
 import base64
 import hashlib
@@ -584,6 +585,89 @@ class TestRepresentations(TestCase):
         )
         ciphertext = [(1, 177325002), (2, 986000561), (3, 2621193783)]
         self.assertEqual(blindfold.decrypt(sk, ciphertext), plaintext)
+
+class TestCiphertextSizes(TestCase):
+    """
+    Tests that ciphertext sizes conform to known closed formulas.
+    """
+    def test_ciphertext_sizes_for_store(self):
+        """
+        Confirm that ciphertexts compatible with the storage operation have
+        the expected sizes.
+        """
+        sk = blindfold.SecretKey.generate(cluster(1), {'store': True})
+        for k in list(range(500)) + [4096]:
+            self.assertLessEqual(
+                len(blindfold.encrypt(sk, 'x' * k)),
+                math.ceil((1 + k + 40) * (4 / 3)) + 2
+            )
+
+        sk = blindfold.SecretKey.generate(cluster(3), {'store': True})
+        for k in list(range(500)) + [4096]:
+            share = blindfold.encrypt(sk, 'x' * k)[0]
+            self.assertLessEqual(
+                len(share),
+                math.ceil((1 + k + 40) * (4 / 3)) + 2
+            )
+
+        sk = blindfold.SecretKey.generate(cluster(3), {'store': True}, threshold=2)
+        for k in list(range(20)) + [4096]:
+            share = blindfold.encrypt(sk, 'x' * k)[0]
+            self.assertLessEqual(
+                len(share),
+                math.ceil(math.ceil((1 + k + 3) * (5 / 4) + 5 + 40) * (4 / 3)) + 2
+            )
+
+        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True})
+        for k in list(range(500)) + [4096]:
+            share = blindfold.encrypt(ck, 'x' * k)[0]
+            self.assertLessEqual(len(share), math.ceil((1 + k) * (4 / 3)) + 2)
+
+        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True}, threshold=2)
+        for k in list(range(20)) + [4096]:
+            share = blindfold.encrypt(ck, 'x' * k)[0]
+            self.assertLessEqual(
+                len(share),
+                math.ceil(math.ceil((1 + k + 3) * (5 / 4) + 5) * (4 / 3)) + 2
+            )
+
+    def test_ciphertext_sizes_for_match(self):
+        """
+        Confirm that ciphertexts compatible with the match operation have the
+        expected sizes.
+        """
+        sk = blindfold.SecretKey.generate(cluster(1), {'match': True})
+        for k in range(0, 4097, 100):
+            self.assertEqual(len(blindfold.encrypt(sk, 'x' * k)), 88)
+
+        sk = blindfold.SecretKey.generate(cluster(3), {'match': True})
+        for k in range(0, 4097, 100):
+            self.assertEqual(len(blindfold.encrypt(sk, 'x' * k)[0]), 88)
+
+    def test_ciphertext_sizes_for_sum(self):
+        """
+        Confirm that ciphertexts compatible with the sum operation have the
+        expected sizes.
+        """
+        for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
+            sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
+            pk = blindfold.PublicKey.generate(sk)
+            self.assertLessEqual(
+                len(blindfold.encrypt(pk, plaintext)),
+                # pylint: disable=protected-access
+                blindfold.SecretKey._paillier_key_length
+            )
+
+            for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+                key = Key.generate(cluster(3), {'sum': True})
+                share = blindfold.encrypt(key, plaintext)[0]
+                self.assertEqual(math.ceil(share.bit_length() / 8), 4)
+
+            for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+                key = Key.generate(cluster(3), {'sum': True}, threshold=2)
+                (index, value) = blindfold.encrypt(key, plaintext)[0]
+                self.assertLessEqual(math.ceil(index.bit_length() / 8), 4)
+                self.assertLessEqual(math.ceil(value.bit_length() / 8), 4)
 
 class TestFunctionsErrors(TestCase):
     """
