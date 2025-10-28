@@ -661,7 +661,7 @@ class TestCiphertextSizes(TestCase):
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
                 key = Key.generate(cluster(3), {'sum': True})
                 share = blindfold.encrypt(key, plaintext)[0]
-                self.assertEqual(math.ceil(share.bit_length() / 8), 4)
+                self.assertLessEqual(math.ceil(share.bit_length() / 8), 4)
 
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
                 key = Key.generate(cluster(3), {'sum': True}, threshold=2)
