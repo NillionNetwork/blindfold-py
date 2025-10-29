@@ -8,8 +8,8 @@ import doctest
 import base64
 import secrets
 import hashlib
-import hmac
 from parts import parts
+from hkdfs import hkdfs
 import bcl
 import shamirs
 import pailliers
@@ -30,7 +30,9 @@ _PLAINTEXT_STRING_BUFFER_LEN_MAX: int = 4096
 """Maximum length of plaintext string value that can be encrypted."""
 
 _HASH: Callable[[Union[bytes, bytearray]], hashlib._hashlib.HASH] = hashlib.sha512
-"""Hash function used for HKDF and matching."""
+"""
+Hash function used for HKDF and deterministic encryption compatible with matching.
+"""
 
 def _xor(a: Union[bytes, bytearray], b: Union[bytes, bytearray]) -> bytes:
     """
@@ -40,65 +42,6 @@ def _xor(a: Union[bytes, bytearray], b: Union[bytes, bytearray]) -> bytes:
     :param b: Second argument.
     """
     return bytes(a_i ^ b_i for (a_i, b_i) in zip(a, b))
-
-def _hkdf_extract(
-        key: Union[bytes, bytearray],
-        salt: Optional[Union[bytes, bytearray]] = None,
-    ) -> bytes:
-    """
-    Extract a pseudorandom key (PRK) using HMAC with the given input key
-    material and salt. If the salt is empty, a zero-filled byte string (of
-    the same length as the hash function's digest) is used.
-
-    :param key: Initial key material.
-    :param salt: Additional salt to incorporate during extraction.
-    """
-    return hmac.new(
-        bytes([0] * _HASH().digest_size) if salt is None else salt,
-        key,
-        _HASH
-    ).digest()
-
-def _hkdf_expand(
-        length: int,
-        pseudorandom_key: Union[bytes, bytearray],
-        info: Optional[Union[bytes, bytearray]] = None
-    ) -> bytes:
-    """
-    Expand the supplied pseudorandom key into output key material (OKM) of
-    the specified length using HMAC-based expansion.
-
-    :param length: Target length of output key.
-    :param pseudorandom_key: Pseudorandom key to expand.
-    :param info: Additional binary data to incorporate during expansion.
-    """
-    info = b'' if info is None else info
-    t = b''
-    okm = b''
-    i = 0
-    while len(okm) < length:
-        i += 1
-        t = hmac.new(pseudorandom_key, t + info + bytes([i]), _HASH).digest()
-        okm += t
-
-    return okm[:length]
-
-def _hkdf(
-        length: int,
-        key: Union[bytes, bytearray],
-        salt: Optional[Union[bytes, bytearray]] = None,
-        info: Optional[Union[bytes, bytearray]] = None
-    ) -> bytes:
-    """
-    Extract a pseudorandom key of ``length`` from ``key`` (and optionally also
-    from ``salt`` and ``info``).
-
-    :param length: Target length of output key.
-    :param key: Pseudorandom key to expand.
-    :param salt: Additional salt to incorporate during extraction.
-    :param info: Additional binary data to incorporate.
-    """
-    return _hkdf_expand(length, _hkdf_extract(key, salt), info)
 
 def _random_bytes(
         length: int,
@@ -114,7 +57,7 @@ def _random_bytes(
     :param salt: Salt to use during deterministic derivation.
     """
     if seed is not None:
-        return _hkdf(length, seed, b'' if salt is None else salt)
+        return hkdfs(length, seed, salt or bytes(0), hash=_HASH)
 
     return secrets.token_bytes(length)
 

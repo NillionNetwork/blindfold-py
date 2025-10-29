@@ -89,6 +89,7 @@ def rtd_url_for_installed_version(name):
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3', None),
     'parts': (rtd_url_for_installed_version('parts'), None),
+    'hkdfs': (rtd_url_for_installed_version('hkdfs'), None),
     'bcl': (rtd_url_for_installed_version('bcl'), None),
     'shamirs': (rtd_url_for_installed_version('shamirs'), None),
     'pailliers': (rtd_url_for_installed_version('pailliers'), None)
