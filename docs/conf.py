@@ -105,7 +105,6 @@ html_theme = 'sphinx_rtd_theme'
 
 # Theme options for Read the Docs.
 html_theme_options = {
-    'display_version': True,
     'collapse_navigation': True,
     'navigation_depth': 1,
     'titles_only': True
