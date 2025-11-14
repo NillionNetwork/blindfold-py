@@ -700,7 +700,11 @@ class TestFunctionsErrors(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='string or binary plaintext must be possible to encode in 4096 bytes or fewer'
+            match=(
+                'string or binary plaintext must be at most ' +
+                str(4096) +
+                ' bytes or fewer in length'
+            )
         ):
             operations = {'store': True}
             sk = blindfold.SecretKey.generate(cluster(1), operations)
@@ -726,7 +730,11 @@ class TestFunctionsErrors(TestCase):
         """
         with pytest.raises(
             ValueError,
-            match='string or binary plaintext must be possible to encode in 4096 bytes or fewer'
+            match=(
+                'string or binary plaintext must be at most ' +
+                str(4096) +
+                ' bytes or fewer in length'
+            )
         ):
             operations = {'match': True}
             sk = blindfold.SecretKey.generate(cluster(1), operations)

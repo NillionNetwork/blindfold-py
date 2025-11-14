@@ -827,9 +827,9 @@ def encrypt(
         buffer = _encode(plaintext)
         if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
             raise ValueError(
-                'string or binary plaintext must be possible to encode in ' +
+                'string or binary plaintext must be at most ' +
                 str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
-                ' bytes or fewer'
+                ' bytes or fewer in length'
             )
 
     # Encode integer data for storage or matching.
