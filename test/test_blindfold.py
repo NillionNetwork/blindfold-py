@@ -40,7 +40,7 @@ def to_hash_base64(output: Union[bytes, list[int]]) -> str:
 
 def cluster(size: int) -> Sequence[Set]:
     """
-    Return a cluster of the specified size.
+    Return a cluster configuration of the specified size.
     """
     return {'nodes': [{} for _ in range(size)]}
 
@@ -125,8 +125,10 @@ class TestKeys(TestCase):
         for (Key, cluster_, threshold) in [
             (blindfold.SecretKey, cluster(3), None),
             (blindfold.SecretKey, cluster(3), 2),
+            (blindfold.SecretKey, cluster(3), 3),
             (blindfold.ClusterKey, cluster(3), None),
-            (blindfold.ClusterKey, cluster(3), 2)
+            (blindfold.ClusterKey, cluster(3), 2),
+            (blindfold.ClusterKey, cluster(3), 3)
         ]:
             key = Key.generate(cluster_, {'sum': True}, threshold)
             key_loaded = Key.load(key.dump())
@@ -138,7 +140,7 @@ class TestKeys(TestCase):
 
     def test_secret_key_from_seed_for_store(self):
         """
-        Test key generation from seed for store operation both with a single
+        Test key generation from seed for the store operation both with a single
         node and multiple (without/with threshold) nodes.
         """
         for (cluster_, threshold) in [
@@ -169,7 +171,7 @@ class TestKeys(TestCase):
 
     def test_secret_key_from_seed_for_match(self):
         """
-        Test key generation from seed for match operation with a single node.
+        Test key generation from seed for the match operation with a single node.
         """
         for cluster_ in [cluster(1), cluster(3)]:
             sk_from_seed = blindfold.SecretKey.generate(cluster_, {'match': True}, seed=_SEED)
@@ -358,7 +360,8 @@ class TestFunctions(TestCase):
 
     def test_encrypt_decrypt_for_sum_with_single_node(self):
         """
-        Test encryption and decryption for the sum operation with a single node.
+        Test encryption and decryption for the sum operation with a single node
+        using a public key.
         """
         sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
         pk = blindfold.PublicKey.generate(sk)
@@ -373,6 +376,7 @@ class TestFunctions(TestCase):
         nodes and without/with threshold (including subcluster combinations).
         """
         for (cluster_, threshold, combinations) in [
+            (cluster(1), None, [{0}]),
             (cluster(3), None, [{0, 1, 2}]),
 
             # Scenarios with thresholds but no missing shares.
@@ -389,17 +393,21 @@ class TestFunctions(TestCase):
             (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
             (cluster(5), 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
         ]:
-            for Key in [
-                blindfold.SecretKey,
-                blindfold.ClusterKey
-            ]:
+            for Key in ( # Test cluster keys only for multiple-node clusters.
+                [blindfold.SecretKey] +
+                [blindfold.ClusterKey] if len(cluster_['nodes']) > 1 else []
+            ):
                 key = Key.generate(cluster_, {'sum': True}, threshold)
                 for plaintext in [-(2 ** 31), -123, 0, 123, (2 ** 31) - 1]:
                     ciphertext = blindfold.encrypt(key, plaintext)
                     for combination in combinations:
                         decrypted = blindfold.decrypt(
                             key,
-                            [ciphertext[i] for i in combination]
+                            (
+                                ciphertext
+                                if threshold is None else
+                                [ciphertext[i] for i in combination]
+                            )
                         )
                         self.assertEqual(decrypted, plaintext)
 

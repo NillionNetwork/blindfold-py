@@ -18,7 +18,7 @@ _PAILLIER_KEY_LENGTH: int = 2048
 """Length in bits of Paillier keys."""
 
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS: int = (2 ** 32) + 15
-"""Modulus to use for secret sharing of 32-bit signed integers."""
+"""Modulus to use for secret shares of 32-bit signed integers."""
 
 _PLAINTEXT_SIGNED_INTEGER_MIN: int = -(2 ** 31)
 """Minimum plaintext 32-bit signed integer value that can be encrypted."""
@@ -781,6 +781,14 @@ def encrypt(
     >>> len(shares) == 3 and all(isinstance(share, int) for share in shares)
     True
 
+    When encrypting for a single-node cluster in a summation-compatible way, it
+    is possible to supply the secret key. However, this introduces a performance
+    overhead because a public key must be generated in this case.
+
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+    >>> isinstance(encrypt(sk, 123), str)
+    True
+
     Invocations that involve invalid argument values or types may raise an
     exception.
 
@@ -933,7 +941,11 @@ def encrypt(
 
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
-            return hex(pailliers.encrypt(key['material'], plaintext))[2:] # No '0x'.
+            return hex(pailliers.encrypt(
+              # Support encryption with either a public or secret key.
+              (key if isinstance(key, PublicKey) else PublicKey.generate(key))['material'],
+              plaintext
+            ))[2:] # Drop '0x' prefix.
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
         if 'threshold' not in key:
