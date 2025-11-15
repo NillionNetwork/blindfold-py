@@ -790,7 +790,12 @@ def encrypt(
     True
 
     Invocations that involve invalid argument values or types may raise an
-    exception.
+    exception. The type of the ``key`` argument is checked. Incompatibilities
+    between the key's attribute values and the supplied ``plaintext`` argument
+    are detected. However, the values associated with those attributes (such as
+    the cluster configuration, the cryptographic material associated with the
+    supplied key, interdependencies between these, and so on) are not checked
+    for validity.
 
     >>> encrypt('abc', 123)
     Traceback (most recent call last):
@@ -804,7 +809,7 @@ def encrypt(
     >>> encrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    TypeError: plaintext to encrypt for sum operation must be an integer
+    TypeError: summation-compatible encryption requires a numeric plaintext
     >>> encrypt(key, 2 ** 64)
     Traceback (most recent call last):
       ...
@@ -819,21 +824,12 @@ def encrypt(
         raise TypeError('secret key, cluster key, or public key expected')
 
     # Local variable for the encoded binary representation of the plaintext.
-    # This variable may or may not be used depending on the type of key supplied.
+    # This variable may or may not be used depending on the supplied key and
+    # plaintext type.
     buffer = None
 
-    # Encode string or binary data for storage or matching.
-    if isinstance(plaintext, (str, bytes, bytearray)):
-        buffer = _encode(plaintext)
-        if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
-            raise ValueError(
-                'string or binary plaintext must be at most ' +
-                str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
-                ' bytes or fewer in length'
-            )
-
-    # Encode integer data for storage or matching.
-    elif isinstance(plaintext, int):
+    # Check and encode (for storage or matching) integer plaintext.
+    if isinstance(plaintext, int):
         # Only 32-bit signed integer plaintexts are supported.
         if (
             plaintext < _PLAINTEXT_SIGNED_INTEGER_MIN or
@@ -844,32 +840,39 @@ def encrypt(
         # Encode an integer for storage or matching.
         buffer = _encode(plaintext)
 
+    # Encode a string or binary plaintext for storage or matching.
+    elif isinstance(plaintext, (str, bytes, bytearray)):
+        buffer = _encode(plaintext)
+        if len(buffer) > _PLAINTEXT_STRING_BUFFER_LEN_MAX + 1:
+            raise ValueError(
+                'string or binary plaintext must be at most ' +
+                str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
+                ' bytes or fewer in length'
+            )
+
     # Invalid plaintext.
     else:
-        raise TypeError(
-            'plaintext must be string, integer, or bytes-like object'
-        )
+        raise TypeError('plaintext must be string, integer, or bytes-like object')
 
     # Encrypt a plaintext for storage and retrieval.
     if key['operations'].get('store'):
-        # For single-node clusters, the data is encrypted using a symmetric key.
-        if len(key['cluster']['nodes']) == 1:
-            return _pack(
-                bcl.symmetric.encrypt(key['material'], bcl.plain(buffer))
-            )
-
-        # For multiple-node clusters, the data or secret shares of the data might
-        # or might not be encrypted by a symmetric key (depending on the supplied
-        # key's parameters).
+        # The data or secret shares of the data might or might not be encrypted
+        # by a symmetric key (depending on the supplied key's parameters).
         optional_enc = (
             (lambda s: bcl.symmetric.encrypt(key['material'], bcl.plain(s)))
             if 'material' in key else
             (lambda s: s)
         )
 
-        # For multiple-node clusters and no threshold, the plaintext is secret-shared
-        # using XOR (with each share symmetrically encrypted in the case of a secret
-        # key).
+        # For single-node clusters, only a secret key can be used to encrypt for
+        # storage. The data is encrypted using a symmetric key found in the supplied
+        # secret key.
+        if len(key['cluster']['nodes']) == 1:
+            return _pack(optional_enc(buffer))
+
+        # For multiple-node clusters and no threshold, a secret-shared plaintext
+        # is obtained using XOR (with each share symmetrically encrypted in the
+        # case of a secret key).
         if 'threshold' not in key:
             shares = []
             aggregate = bytes(len(buffer))
@@ -935,11 +938,12 @@ def encrypt(
 
     # Encrypt an integer plaintext in a summation-compatible way.
     if key['operations'].get('sum'):
-        # Non-integer cannot be encrypted for summation.
+        # Non-integer plaintexts cannot be encrypted for summation.
         if not isinstance(plaintext, int):
-            raise TypeError('plaintext to encrypt for sum operation must be an integer')
+            raise TypeError('summation-compatible encryption requires a numeric plaintext')
 
-        # For single-node clusters, the Paillier cryptosystem is used.
+        # For single-node clusters, the Paillier cryptosystem is used. Only a
+        # Paillier secret or public key can be used to encrypt for summation.
         if len(key['cluster']['nodes']) == 1:
             return hex(pailliers.encrypt(
               # Support encryption with either a public or secret key.
@@ -971,6 +975,7 @@ def encrypt(
                     ((plaintext - total) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
                 ) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
             )
+
             return shares
 
         # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
@@ -1086,7 +1091,12 @@ def decrypt(
 
     An exception is raised if a ciphertext cannot be decrypted using the
     supplied key (*e.g.*, because one or both are malformed or they are
-    incompatible).
+    incompatible). The type of the``key`` argument is checked. Incompatibilities
+    between the key's attribute values and the supplied ``ciphertext`` argument
+    are detected. However, the values associated with those attributes (such as
+    the cluster configuration, the cryptographic material associated with the
+    supplied key, interdependencies between these, and so on) are not checked
+    for validity.
 
     >>> decrypt('abc', 123)
     Traceback (most recent call last):
@@ -1096,14 +1106,15 @@ def decrypt(
     >>> decrypt(key, 'abc')
     Traceback (most recent call last):
       ...
-    ValueError: secret key requires a valid ciphertext from a multiple-node cluster
-    >>> decrypt(
-    ...     SecretKey({'cluster': {'nodes': [{}]}, 'operations': {}}),
-    ...     'abc'
-    ... )
+    ValueError: key requires a valid ciphertext from a multiple-node cluster
+    >>> key = SecretKey.generate({'nodes': [{}]}, {'store': True})
+    >>> ciphertext = encrypt(key, 'abc')
+    >>> key['operations'] = {}
+    >>> decrypt(key, ciphertext)
     Traceback (most recent call last):
       ...
     ValueError: cannot decrypt the supplied ciphertext using the supplied key
+    >>> key = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> key_alt = SecretKey.generate({'nodes': [{}, {}]}, {'store': True})
     >>> decrypt(key_alt, encrypt(key, 123))
     Traceback (most recent call last):
@@ -1117,34 +1128,21 @@ def decrypt(
         'cannot decrypt the supplied ciphertext using the supplied key'
     )
 
-    # Confirm that the secret key and ciphertext have compatible cluster
-    # specifications.
+    # Identify common (i.e., not operation-specific) incompatibilities between
+    # the supplied key and ciphertext.
     if len(key['cluster']['nodes']) == 1:
         if not isinstance(ciphertext, str):
             raise ValueError(
-              'secret key requires a valid ciphertext from a single-node cluster'
+              'key requires a valid ciphertext from a single-node cluster'
             )
-    else:
-        if (
-            isinstance(ciphertext, str) or # Must be a container sequence.
-            (not isinstance(ciphertext, Sequence)) or
-            (not (
-                all(
-                    (
-                        isinstance(c, Sequence) and
-                        len(c) == 2 and
-                        all(isinstance(x, int) for x in c)
-                    )
-                    for c in ciphertext
-                ) or
-                all(isinstance(c, int) for c in ciphertext) or
-                all(isinstance(c, str) for c in ciphertext)
-            ))
-        ):
+    else: # Key has a multiple-node cluster configuration.
+        # Reject ciphertexts that are not compatible with multiple-node clusters.
+        if isinstance(ciphertext, str) or not isinstance(ciphertext, Sequence):
             raise ValueError(
-              'secret key requires a valid ciphertext from a multiple-node cluster'
+              'key requires a valid ciphertext from a multiple-node cluster'
             )
 
+        # Reject share sequences that do not contain enough shares.
         if (
             isinstance(ciphertext, Sequence) and
             len(ciphertext) < (
@@ -1159,50 +1157,65 @@ def decrypt(
 
     # Decrypt a value that was encrypted for storage and retrieval.
     if key['operations'].get('store'):
+        # The plaintext or secret shares of the plaintext might or might not
+        # have been encrypted by a symmetric key (depending on the supplied key).
+        optional_dec = (
+            (lambda c: bcl.symmetric.decrypt(key['material'], bcl.cipher(c)))
+            if 'material' in key else
+            (lambda c: c)
+        )
+
         # For single-node clusters, the plaintext is encrypted using a symmetric key.
         if len(key['cluster']['nodes']) == 1:
+            # Ciphertext type already confirmed in common checks above.
             try:
-                return _decode(
-                    bcl.symmetric.decrypt(
-                        key['material'],
-                        bcl.cipher(_unpack(ciphertext))
-                    )
-                )
+                return _decode(optional_dec(_unpack(ciphertext)))
             except Exception as exc:
                 raise error from exc
 
-        # For multiple-node clusters, the shares may be encrypted using a symmetric
-        # key (in the case of a secret key).
+        # For multiple-node clusters, the ciphertext must be a sequence of shares
+        # (each element being Base64-encoded binary value). The quantity of shares
+        # is already confirmed during the common checks above.
+        if not all(isinstance(c, str) for c in ciphertext):
+            raise TypeError('secret shares must all be Base64-encoded binary values')
+
+        # Each share consists of Base64-encoded (possibly encrypted) binary data.
         shares = [_unpack(share) for share in ciphertext]
-        if 'material' in key:
-            try:
-                shares = [
-                    bcl.symmetric.decrypt(key['material'], bcl.cipher(share))
-                    for share in shares
-                ]
-            except Exception as exc:
-                raise error from exc
+        try:
+            shares = [optional_dec(share) for share in shares]
+        except Exception as exc:
+            raise error from exc
 
         # For multiple-node clusters and no threshold, the plaintext is secret-shared
-        # using XOR (with each share symmetrically encrypted in the case of a secret
-        # key).
+        # using XOR.
         if 'threshold' not in key:
-            bytes_ = bytes(len(shares[0]))
-            for share_ in shares:
-                bytes_ = _xor(bytes_, share_)
+            # Accept only sequences of XOR secret shares that all have the same length.
+            if len({len(share) for share in shares}) != 1:
+                raise ValueError('secret shares must have matching lengths')
 
-            return _decode(bytes_)
+            # Build up encoded plaintext as ``buffer``; its decoding is then returned.
+            buffer = bytes(len(shares[0]))
+            for share_ in shares:
+                buffer = _xor(buffer, share_)
+
+            return _decode(buffer)
 
         # For multiple-node clusters and a threshold, Shamir's secret sharing is used
-        # to create a secret-shared plaintext (with each share symmetrically encrypted
-        # in the case of a secret key).
+        # to create a secret-shared plaintext.
+
+        # Accept only sequences of shares having sufficient and matching lengths.
+        lengths = list({len(share) for share in shares})
+        if not (len(lengths) == 1 and lengths[0] >= 9):
+            raise ValueError('secret shares must have sufficient and matching lengths')
+
+        # Build up encoded plaintext as ``buffer``; its decoding is then returned.
         shares_of_plaintext = [list(parts(share[4:], length=5)) for share in shares]
         indices = [ # Ordered list of indices for the shares of the plaintext.
             int.from_bytes(share[:4], byteorder='little', signed=False)
             for share in shares
         ]
         number_of_plaintext_subarrays = len(shares_of_plaintext[0])
-        array = bytes(0) # Accumulator for assembling plaintext (an array of bytes).
+        buffer = bytes(0) # Accumulator for assembling plaintext (an array of bytes).
         for i in range(number_of_plaintext_subarrays): # Subarrays making up plaintext.
             subarray_shares = [
                 [
@@ -1221,19 +1234,20 @@ def decrypt(
                 byteorder='little',
                 signed=False
             )
-            array += subarray_as_bytes
+            buffer += subarray_as_bytes
 
         # Drop padding bytes (added during encryption so that byte count is a
         # multiple of four).
-        while array[0] == 255:
-            array = array[1:]
+        while buffer[0] == 255:
+            buffer = buffer[1:]
 
-        return _decode(array)
+        return _decode(buffer)
 
     # Decrypt a value that was encrypted in a summation-compatible way.
     if key['operations'].get('sum'):
         # For single-node clusters, the Paillier cryptosystem is used.
         if len(key['cluster']['nodes']) == 1:
+            # Ciphertext type already confirmed in common checks.
             plaintext = pailliers.decrypt(
                 key['material'],
                 pailliers.cipher(int(ciphertext, 16))
@@ -1241,6 +1255,20 @@ def decrypt(
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
         elif 'threshold' not in key:
+            # Accept only sequences of additive secret shares. Ciphertext type
+            # and quantity of shares are already confirmed by common checks.
+            if not all(isinstance(c, int) for c in ciphertext):
+                raise TypeError('secret shares must all be integers')
+
+            if not all(
+                0 <= c < _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                for c in ciphertext
+            ):
+                raise ValueError(
+                    'secret shares must all be nonnegative integers less than the modulus'
+                )
+
+            # Store the decryption result in ``plaintext``.
             inverse_masks = [
                 pow(
                     key['material'][i] if 'material' in key else 1,
@@ -1249,9 +1277,8 @@ def decrypt(
                 )
                 for i in range(len(key['cluster']['nodes']))
             ]
-            shares = ciphertext
             plaintext = 0
-            for (i, share_) in enumerate(shares):
+            for (i, share_) in enumerate(ciphertext):
                 plaintext = (
                     plaintext +
                     ((inverse_masks[i] * share_) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS)
@@ -1259,6 +1286,40 @@ def decrypt(
 
         # For multiple-node clusters and a threshold, Shamir's secret sharing is used.
         else:
+            # Accept only sequences of Shamir's secret shares (in integer form).
+            # Ciphertext type and quantity of shares are already confirmed by
+            # common checks.
+            if not all(isinstance(share, Sequence) for share in ciphertext):
+                raise TypeError('secret shares must all be sequences')
+
+            if not all(len(share) == 2 for share in ciphertext):
+                raise ValueError('secret shares must all have two components')
+
+            if not all(all(isinstance(x, int) for x in share) for share in ciphertext):
+                raise TypeError('secret share index and value components must be integers')
+
+            if not (
+                all(
+                    1 <= share[0] < _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                    for share in ciphertext
+                ) and
+                len({share[0] for share in ciphertext}) == len(ciphertext)
+            ):
+                raise ValueError(
+                    'secret share index components must be distinct positive ' +
+                    'integers less than the modulus'
+                )
+
+            if not all(
+                0 <= share[1] < _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                for share in ciphertext
+            ):
+                raise ValueError(
+                    'secret share value components must be nonnegative integers ' +
+                    'less than the modulus'
+                )
+
+            # Store the decryption result in ``plaintext``.
             inverse_masks = [
                 pow(
                     key['material'][i] if 'material' in key else 1,
@@ -1289,6 +1350,8 @@ def decrypt(
 
         return plaintext
 
+    # The below should not occur unless the key's cluster or operations
+    # information is malformed/missing or the ciphertext is unsupported.
     raise error
 
 def allot(

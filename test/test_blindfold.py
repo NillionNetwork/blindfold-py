@@ -754,128 +754,244 @@ class TestFunctionsErrors(TestCase):
     """
     Tests verifying that encryption/decryption methods return expected errors.
     """
-    def test_encrypt_of_int_for_store_error(self):
+    def test_encrypt_errors(self):
         """
-        Test range error during encryption of integer for matching.
-        """
-        with pytest.raises(
-            ValueError,
-            match='numeric plaintext must be a valid 32-bit signed integer'
-        ):
-            operations = {'store': True}
-            sk = blindfold.SecretKey.generate(cluster(1), operations)
-            plaintext = _PLAINTEXT_SIGNED_INTEGER_MAX + 1
-            blindfold.encrypt(sk, plaintext)
-
-    def test_encrypt_of_str_for_store_error(self):
-        """
-        Test range error during encryption of string for matching.
+        Test errors that can occur during encryption.
         """
         with pytest.raises(
-            ValueError,
-            match=(
-                'string or binary plaintext must be at most ' +
-                str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
-                ' bytes or fewer in length'
-            )
+            TypeError,
+            match='secret key, cluster key, or public key expected'
         ):
-            operations = {'store': True}
-            sk = blindfold.SecretKey.generate(cluster(1), operations)
-            plaintext = 'X' * (_PLAINTEXT_STRING_BUFFER_LEN_MAX + 1)
-            blindfold.encrypt(sk, plaintext)
+            blindfold.encrypt('abc', 123)
 
-    def test_encrypt_of_int_for_match_error(self):
-        """
-        Test range error during encryption of integer for matching.
-        """
+        with pytest.raises(
+            TypeError,
+            match='plaintext must be string, integer, or bytes-like object'
+        ):
+            sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
+            blindfold.encrypt(sk, {})
+
         with pytest.raises(
             ValueError,
-            match='numeric plaintext must be a valid 32-bit signed integer'
+            match='cannot encrypt the supplied plaintext using the supplied key'
         ):
-            operations = {'match': True}
-            sk = blindfold.SecretKey.generate(cluster(1), operations)
-            plaintext = _PLAINTEXT_SIGNED_INTEGER_MAX + 1
-            blindfold.encrypt(sk, plaintext)
+            sk = blindfold.SecretKey.generate(cluster(2), {'sum': True})
+            del sk['operations']['sum']
+            blindfold.encrypt(sk, 123)
 
-    def test_encrypt_of_str_for_match_error(self):
-        """
-        Test range error during encryption of string for matching.
-        """
-        with pytest.raises(
-            ValueError,
-            match=(
-                'string or binary plaintext must be at most ' +
-                str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
-                ' bytes or fewer in length'
-            )
-        ):
-            operations = {'match': True}
-            sk = blindfold.SecretKey.generate(cluster(1), operations)
-            plaintext = 'X' * (_PLAINTEXT_STRING_BUFFER_LEN_MAX + 1)
-            blindfold.encrypt(sk, plaintext)
+        for (Key, n, operations) in [
+            (blindfold.SecretKey, 1, {'store': True}),
+            (blindfold.SecretKey, 1, {'match': True}),
+            (blindfold.SecretKey, 3, {'store': True}),
+            (blindfold.SecretKey, 3, {'match': True}),
+            (blindfold.ClusterKey, 3, {'store': True})
+        ]:
+            with pytest.raises(
+                ValueError,
+                match='numeric plaintext must be a valid 32-bit signed integer'
+            ):
+                key = Key.generate(cluster(n), operations)
+                plaintext = _PLAINTEXT_SIGNED_INTEGER_MAX + 1
+                blindfold.encrypt(key, plaintext)
 
-    def test_encrypt_of_int_for_sum_error(self):
-        """
-        Test range error during encryption of integer for matching.
-        """
+            with pytest.raises(
+                ValueError,
+                match=(
+                    'string or binary plaintext must be at most ' +
+                    str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
+                    ' bytes or fewer in length'
+                )
+            ):
+                key = Key.generate(cluster(n), operations)
+                plaintext = 'X' * (_PLAINTEXT_STRING_BUFFER_LEN_MAX + 1)
+                blindfold.encrypt(key, plaintext)
+
         for cluster_ in [cluster(1), cluster(3)]:
+            sk = blindfold.SecretKey.generate(cluster_, {'sum': True})
+            ek = blindfold.PublicKey.generate(sk) if len(cluster_['nodes']) == 1 else sk
+
             with pytest.raises(
                 TypeError,
-                match='plaintext to encrypt for sum operation must be an integer'
+                match='summation-compatible encryption requires a numeric plaintext'
             ):
-                sk = blindfold.SecretKey.generate(cluster_, {'sum': True})
-                ek = blindfold.PublicKey.generate(sk) if len(cluster_['nodes']) == 1 else sk
                 blindfold.encrypt(ek, 'abc')
 
             with pytest.raises(
                 ValueError,
                 match='numeric plaintext must be a valid 32-bit signed integer'
             ):
-                sk = blindfold.SecretKey.generate(cluster_, {'sum': True})
-                ek = blindfold.PublicKey.generate(sk) if len(cluster_['nodes']) == 1 else sk
                 blindfold.encrypt(ek, _PLAINTEXT_SIGNED_INTEGER_MAX + 1)
 
-    def test_decrypt_for_store_cluster_size_mismatch_error(self):
+    def test_decrypt_errors_invalid_key(self):
         """
-        Test errors in decryption for store operation due to cluster size mismatch.
+        Test errors that can occur during decryption with an invalid key.
         """
-        sk_one = blindfold.SecretKey.generate(cluster(1), {'store': True})
-        sk_two = blindfold.SecretKey.generate(cluster(2), {'store': True})
-        sk_three = blindfold.SecretKey.generate(cluster(3), {'store': True})
-        ciphertext_one = blindfold.encrypt(sk_one, 123)
-        ciphertext_two = blindfold.encrypt(sk_two, 123)
-
         with pytest.raises(
-            ValueError,
-            match='secret key requires a valid ciphertext from a single-node cluster'
+            TypeError,
+            match='secret key or cluster key expected'
         ):
-            blindfold.decrypt(sk_one, ciphertext_two)
+            sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
+            pk = blindfold.PublicKey.generate(sk)
+            blindfold.decrypt(pk, blindfold.encrypt(sk, 123))
 
-        with pytest.raises(
-            ValueError,
-            match='secret key requires a valid ciphertext from a multiple-node cluster'
-        ):
-            blindfold.decrypt(sk_two, ciphertext_one)
-
-        with pytest.raises(
-            ValueError,
-            match='ciphertext must have enough shares for cluster size or threshold'
-        ):
-            blindfold.decrypt(sk_three, ciphertext_two)
-
-    def test_decrypt_for_store_key_mismatch_error(self):
-        """
-        Test errors in decryption for store operation due to key mismatch.
-        """
         with pytest.raises(
             ValueError,
             match='cannot decrypt the supplied ciphertext using the supplied key'
         ):
-            sk = blindfold.SecretKey.generate(cluster(1), {'store': True})
-            sk_alt = blindfold.SecretKey.generate(cluster(1), {'store': True})
-            plaintext = 123
-            ciphertext = blindfold.encrypt(sk, plaintext)
-            blindfold.decrypt(sk_alt, ciphertext)
+            sk = blindfold.SecretKey.generate(cluster(2), {'store': True})
+            ciphertext = blindfold.encrypt(sk, 'abc')
+            sk['operations'] = {}
+            blindfold.decrypt(sk, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                'threshold must be a positive integer less than the quantity of shares'
+            )
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=3)
+            ck['threshold'] = 4 # Invalid key manipulation.
+            blindfold.encrypt(ck, 123)
+
+    def test_decrypt_errors_key_ciphertext_conflict(self):
+        """
+        Test errors that can occur during decryption when the key and
+        ciphertext conflict.
+        """
+        for operations in [{'store': True}, {'sum': True}]:
+            sk_one = blindfold.SecretKey.generate(cluster(1), operations)
+            sk_two = blindfold.SecretKey.generate(cluster(2), operations)
+            sk_three = blindfold.SecretKey.generate(cluster(3), operations)
+            ciphertext_one = blindfold.encrypt(sk_one, 123)
+            ciphertext_two = blindfold.encrypt(sk_two, 123)
+
+            with pytest.raises(
+                ValueError,
+                match='key requires a valid ciphertext from a single-node cluster'
+            ):
+                blindfold.decrypt(sk_one, ciphertext_two)
+
+            with pytest.raises(
+                ValueError,
+                match='key requires a valid ciphertext from a multiple-node cluster'
+            ):
+                blindfold.decrypt(sk_two, ciphertext_one)
+
+            with pytest.raises(
+                ValueError,
+                match='ciphertext must have enough shares for cluster size or threshold'
+            ):
+                blindfold.decrypt(sk_three, ciphertext_two)
+
+        for n in [1, 3]:
+            with pytest.raises(
+                ValueError,
+                match='cannot decrypt the supplied ciphertext using the supplied key'
+            ):
+                sk = blindfold.SecretKey.generate(cluster(n), {'store': True})
+                sk_alt = blindfold.SecretKey.generate(cluster(n), {'store': True})
+                blindfold.decrypt(sk_alt, blindfold.encrypt(sk, 123))
+
+    def test_decrypt_errors_invalid_ciphertext(self):
+        """
+        Test errors that can occur during decryption when the ciphertext is
+        invalid.
+        """
+        with pytest.raises(
+            TypeError,
+            match='secret shares must all be Base64-encoded binary values'
+        ):
+            sk = blindfold.SecretKey.generate(cluster(2), {'store': True})
+            ciphertext = blindfold.encrypt(sk, 'abc')
+            ciphertext[0] = 123
+            blindfold.decrypt(sk, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match='secret shares must have matching lengths'
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(2), {'store': True})
+            ciphertext_one = blindfold.encrypt(sk, '')
+            ciphertext_two = blindfold.encrypt(sk, 'abc')
+            blindfold.decrypt(ck, [ciphertext_one[0], ciphertext_two[1]])
+
+        with pytest.raises(
+            ValueError,
+            match='secret shares must have sufficient and matching lengths'
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(2), {'store': True}, threshold=1)
+            ciphertext_one = blindfold.encrypt(ck, '')
+            ciphertext_two = blindfold.encrypt(ck, 'abc')
+            blindfold.decrypt(ck, [ciphertext_one[0], ciphertext_two[1]])
+
+        with pytest.raises(
+            TypeError,
+            match='secret shares must all be integers'
+        ):
+            sk = blindfold.SecretKey.generate(cluster(2), {'sum': True})
+            ciphertext = blindfold.encrypt(sk, 123)
+            ciphertext[0] = 'abc'
+            blindfold.decrypt(sk, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match='secret shares must all be nonnegative integers less than the modulus'
+        ):
+            sk = blindfold.SecretKey.generate(cluster(2), {'sum': True})
+            ciphertext = blindfold.encrypt(sk, 123)
+            ciphertext[0] = -1
+            blindfold.decrypt(sk, ciphertext)
+
+        with pytest.raises(
+            TypeError,
+            match='secret shares must all be sequences'
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+            ciphertext = blindfold.encrypt(ck, 123)
+            ciphertext[0] = 123
+            blindfold.decrypt(ck, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match='secret shares must all have two components'
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+            ciphertext = blindfold.encrypt(ck, 123)
+            ciphertext[0] = ciphertext[0][:1]
+            blindfold.decrypt(ck, ciphertext)
+
+        with pytest.raises(
+            TypeError,
+            match='secret share index and value components must be integers'
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+            ciphertext = blindfold.encrypt(ck, 123)
+            ciphertext[0] = (ciphertext[0][0], 'abc')
+            blindfold.decrypt(ck, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                'secret share index components must be distinct positive integers ' +
+                'less than the modulus'
+            )
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+            ciphertext = blindfold.encrypt(ck, 123)
+            ciphertext[0] = (ciphertext[1][0], ciphertext[1][1])
+            blindfold.decrypt(ck, ciphertext)
+
+        with pytest.raises(
+            ValueError,
+            match=(
+                'secret share value components must be nonnegative integers ' +
+                'less than the modulus'
+            )
+        ):
+            ck = blindfold.ClusterKey.generate(cluster(3), {'sum': True}, threshold=2)
+            ciphertext = blindfold.encrypt(ck, 123)
+            ciphertext[0] = (ciphertext[0][0], -1)
+            blindfold.decrypt(ck, ciphertext)
 
 class TestSecureComputations(TestCase):
     """
