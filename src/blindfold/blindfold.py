@@ -1292,8 +1292,8 @@ def decrypt(
     raise error
 
 def allot(
-        document: Union[int, bool, str, list, dict]
-    ) -> Sequence[Union[int, bool, str, list, dict]]:
+        document: Union[bool, int, float, str, list, dict, None]
+    ) -> Sequence[Union[bool, int, float, str, list, dict, None]]:
     """
     Convert a document that may contain ciphertexts intended for multiple-node
     clusters into secret shares of that document.
@@ -1320,6 +1320,18 @@ def allot(
 
     >>> allot({'id': 0, 'age': 23})
     [{'id': 0, 'age': 23}]
+
+    When performing allotment, ``None`` is a valid document share leaf value.
+
+    >>> d = {
+    ...     'age': {'%allot': [1, 2]},
+    ...     'name': None
+    ... }
+    >>> for d in allot(d): print(d)
+    {'age': {'%share': 1}, 'name': None}
+    {'age': {'%share': 2}, 'name': None}
+    >>> allot(None)
+    [None]
 
     Any attempt to convert a document that has an incorrect structure raises
     an exception.
@@ -1431,9 +1443,9 @@ def allot(
 
 def unify(
         key: Union[SecretKey, ClusterKey],
-        documents: Sequence[Union[int, bool, str, list, dict]],
+        documents: Sequence[Union[bool, int, float, str, list, dict]],
         ignore: Optional[Sequence[str]] = None
-    ) -> Union[int, bool, str, list, dict]:
+    ) -> Union[bool, int, float, str, list, dict, None]:
     """
     Combine a sequence of compatible secret shares of a document into one
     document.
@@ -1485,6 +1497,11 @@ def unify(
     >>> shares = allot(encrypted)
     >>> decrypted = unify(sk, shares)
     >>> data == decrypted
+    True
+
+    When performing unification, ``None`` is a valid document share leaf value.
+
+    >>> unify(sk, [None, None]) == None
     True
 
     The ``ignore`` parameter specifies which dictionary keys should be ignored

@@ -947,7 +947,7 @@ class TestSecureComputations(TestCase):
 
 class TestDocumentFunctions(TestCase):
     """
-    Test the allot and unify functions for working with secret-shared documents.
+    Test allotment/unification functions for working with secret-shared documents.
     """
     def test_allot(self):
         """
