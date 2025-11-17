@@ -216,6 +216,164 @@ def _decode(value: Union[bytes, bytearray]) -> Union[int, str, bytes]:
 
     raise ValueError('cannot decode value')
 
+def _validate_cluster_configuration(cluster: dict):
+    """
+    Ensure the provided cluster configuration is valid.
+
+    :param cluster: Cluster configuration.
+
+    A configuration must satisfy independent requirements that govern its type
+    and what keys/values it must have.
+
+    >>> _validate_cluster_configuration([{}, {}, {}])
+    Traceback (most recent call last):
+      ...
+    TypeError: cluster configuration must be a dictionary
+    >>> _validate_cluster_configuration({})
+    Traceback (most recent call last):
+      ...
+    ValueError: cluster configuration must specify nodes
+    >>> _validate_cluster_configuration({'nodes': 123})
+    Traceback (most recent call last):
+      ...
+    TypeError: cluster configuration node specification must be a sequence
+    >>> _validate_cluster_configuration({'nodes': []})
+    Traceback (most recent call last):
+      ...
+    ValueError: cluster configuration must contain at least one node
+
+    This function does not check the supplied arguments against requirements
+    for particular key types. Those checks are performed within the methods
+    of specific key classes.
+    """
+    # Check the cluster configuration.
+    if not isinstance(cluster, dict):
+        raise TypeError('cluster configuration must be a dictionary')
+
+    if 'nodes' not in cluster:
+        raise ValueError('cluster configuration must specify nodes')
+
+    if not isinstance(cluster['nodes'], Sequence):
+        raise TypeError(
+            'cluster configuration node specification must be a sequence'
+        )
+
+    if len(cluster['nodes']) < 1:
+        raise ValueError('cluster configuration must contain at least one node')
+
+def _validate_operations_specification(operations: dict):
+    """
+    Ensure the provided operations specification is valid.
+
+    :param specification: Operations specification.
+
+    A specification must satisfy independent requirements that govern its type
+    and what keys/values it must have.
+
+    >>> _validate_operations_specification([])
+    Traceback (most recent call last):
+      ...
+    TypeError: operations specification must be a dictionary
+    >>> _validate_operations_specification({'foo': True})
+    Traceback (most recent call last):
+      ...
+    ValueError: permitted operations are limited to store, match, and sum
+    >>> _validate_operations_specification({'store': 123})
+    Traceback (most recent call last):
+      ...
+    TypeError: operations specification values must be boolean
+    >>> _validate_operations_specification({'store': True, 'sum': True})
+    Traceback (most recent call last):
+      ...
+    ValueError: operations specification must designate exactly one operation
+
+    This function does not check the supplied arguments against requirements
+    for particular key types. Those checks are performed within the methods
+    of specific key classes.
+    """
+    # Check the operations specification.
+    if not isinstance(operations, dict):
+        raise TypeError('operations specification must be a dictionary')
+
+    if not set(operations.keys()).issubset({'store', 'match', 'sum'}):
+        raise ValueError(
+            'permitted operations are limited to store, match, and sum'
+        )
+
+    if not all(isinstance(value, bool) for value in operations.values()):
+        raise TypeError('operations specification values must be boolean')
+
+    if len([op for (op, status) in operations.items() if status]) != 1:
+        raise ValueError(
+            'operations specification must designate exactly one operation'
+        )
+
+def _validate_key_attributes(
+        cluster: dict,
+        operations: dict,
+        threshold: Optional[int] = None
+    ):
+    """
+    Ensure the provided cluster configuration, operations specification, and
+    threshold are valid and compatible with one another.
+
+    :param cluster: Cluster configuration.
+    :param operations: Specification of supported operations on ciphertexts.
+    :param threshold: Lower bound on number of parties required to decrypt a
+        ciphertext.
+
+    The threshold parameter is checked for its independent validity.
+
+    >>> _validate_key_attributes({'nodes': [{}, {}, {}]}, {'sum': True}, 'abc')
+    Traceback (most recent call last):
+      ...
+    TypeError: threshold must be an integer
+
+    Furthermore, the supplied arguments must also be compatible and consistent
+    with one another.
+
+    >>> _validate_key_attributes({'nodes': [{}, {}, {}]}, {'sum': True}, 4)
+    Traceback (most recent call last):
+      ...
+    ValueError: threshold must be a positive integer not larger than the cluster size
+    >>> _validate_key_attributes({'nodes': [{}]}, {'sum': True}, 2)
+    Traceback (most recent call last):
+      ...
+    ValueError: thresholds are only supported for multiple-node clusters
+    >>> _validate_key_attributes({'nodes': [{}, {}, {}]}, {'sum': True}, 4)
+    Traceback (most recent call last):
+      ...
+    ValueError: threshold must be a positive integer not larger than the cluster size
+    >>> _validate_key_attributes({'nodes': [{}, {}, {}]}, {'match': True}, 2)
+    Traceback (most recent call last):
+      ...
+    ValueError: thresholds are only supported for the store and sum operations
+
+    This function does not check the supplied arguments against requirements
+    for particular key types. Those checks are performed within the methods
+    of specific key classes.
+    """
+    # Check the threshold value (if one is supplied).
+    if threshold is not None:
+        if not isinstance(threshold, int):
+            raise TypeError('threshold must be an integer')
+
+        if len(cluster['nodes']) == 1:
+            raise ValueError(
+                'thresholds are only supported for multiple-node clusters'
+            )
+
+        if threshold < 1 or threshold > len(cluster['nodes']):
+            raise ValueError(
+                'threshold must be a positive integer not larger than the cluster size'
+            )
+
+
+        if (not operations.get('store')) and (not operations.get('sum')):
+            raise ValueError(
+                'thresholds are only supported for the store and sum operations'
+            )
+
 class SecretKey(dict):
     """
     Data structure for representing all categories of secret key instances.
@@ -227,6 +385,25 @@ class SecretKey(dict):
     modification in tests).
     """
 
+    def __init__(
+        self: SecretKey,
+        cluster: dict,
+        operations: dict,
+        threshold: Optional[int] = None
+    ):
+        """
+        Create an instance of a secret key after checking that all arguments are valid.
+        """
+        _validate_cluster_configuration(cluster)
+        _validate_operations_specification(operations)
+        _validate_key_attributes(cluster, operations, threshold)
+
+        self['cluster'] = cluster
+        self['operations'] = operations
+
+        if threshold is not None:
+            self['threshold'] = threshold
+
     @staticmethod
     def generate(
         cluster: dict,
@@ -236,7 +413,7 @@ class SecretKey(dict):
     ) -> SecretKey:
         """
         Return a secret key built according to what is specified in the supplied
-        cluster configuration, operation specification, and other parameters.
+        cluster configuration, operations specification, and other parameters.
 
         :param cluster: Cluster configuration for this key.
         :param operations: Specification of supported operations on ciphertexts.
@@ -271,7 +448,7 @@ class SecretKey(dict):
         Traceback (most recent call last):
           ...
         ValueError: thresholds are only supported for multiple-node clusters
-        >>> SecretKey.generate({'nodes': [{}]}, {'sum': True}, threshold=-1)
+        >>> SecretKey.generate({'nodes': [{}, {}]}, {'sum': True}, threshold=-1)
         Traceback (most recent call last):
           ...
         ValueError: threshold must be a positive integer not larger than the cluster size
@@ -284,44 +461,7 @@ class SecretKey(dict):
           ...
         ValueError: seed-based ... summation-compatible ... not supported for single-node ...
         """
-        if (
-            not isinstance(cluster, dict) or
-            'nodes' not in cluster or
-            not isinstance(cluster['nodes'], Sequence)
-        ):
-            raise ValueError('valid cluster configuration expected')
-
-        # Store the cluster size as specified in the supplied key to allow for
-        # more concise code below.
-        cluster_size = len(cluster['nodes'])
-
-        if cluster_size < 1:
-            raise ValueError('cluster configuration must contain at least one node')
-
-        if (
-            (not isinstance(operations, dict)) or
-            (not set(operations.keys()).issubset({'store', 'match', 'sum'}))
-        ):
-            raise ValueError('valid operations specification expected')
-
-        if len([op for (op, status) in operations.items() if status]) != 1:
-            raise ValueError('secret key must support exactly one operation')
-
-        if threshold is not None:
-            if not isinstance(threshold, int):
-                raise TypeError('threshold must be an integer')
-            if threshold < 1 or threshold > cluster_size:
-                raise ValueError(
-                    'threshold must be a positive integer not larger than the cluster size'
-                )
-            if cluster_size == 1:
-                raise ValueError(
-                    'thresholds are only supported for multiple-node clusters'
-                )
-            if (not operations.get('store')) and (not operations.get('sum')):
-                raise ValueError(
-                    'thresholds are only supported for the store and sum operations'
-                )
+        secret_key = SecretKey(cluster, operations, threshold)
 
         if seed is not None and not isinstance(seed, (bytes, bytearray, str)):
             raise TypeError('seed must be a bytes-like object or a string')
@@ -329,17 +469,6 @@ class SecretKey(dict):
         # Normalize type of seed argument.
         if isinstance(seed, str):
             seed = seed.encode()
-
-        # Create instance with default cluster configuration and operations
-        # specification, updating the configuration and specification with the
-        # supplied arguments.
-        secret_key = SecretKey({
-            'material': {},
-            'cluster': cluster,
-            'operations': operations
-        })
-        if threshold is not None:
-            secret_key['threshold'] = threshold
 
         if secret_key['operations'].get('store'):
             # Symmetric key for encrypting the plaintext or the shares of a plaintext.
@@ -354,11 +483,11 @@ class SecretKey(dict):
             secret_key['material'] = _random_bytes(64, seed)
 
         if secret_key['operations'].get('sum'):
-            if cluster_size == 1:
+            if len(secret_key['cluster']['nodes']) == 1:
                 # Paillier secret key for encrypting a plaintext integer value.
                 if seed is not None:
                     raise ValueError(
-                        'seed-based derivation of summation-compatible keys ' +
+                        'seed-based derivation of summation-compatible secret keys ' +
                         'is not supported for single-node clusters'
                     )
                 secret_key['material'] = pailliers.secret(SecretKey._paillier_key_length)
@@ -496,38 +625,103 @@ class SecretKey(dict):
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        secret_key = SecretKey({
-            'material': {},
-            'cluster': dictionary['cluster'],
-            'operations': dictionary['operations'],
-        })
-        if 'threshold' in dictionary:
-            secret_key['threshold'] = dictionary['threshold']
+        cluster = dictionary.get('cluster')
+        operations = dictionary.get('operations')
+        threshold = dictionary.get('threshold')
+        secret_key = SecretKey(cluster, operations, threshold)
 
-        if isinstance(dictionary['material'], list):
-            # Node-specific masks for secret shares (for sum operations).
-            if all(isinstance(k, int) for k in dictionary['material']):
-                secret_key['material'] = dictionary['material']
-        elif isinstance(dictionary['material'], str):
-            secret_key['material'] = _unpack(dictionary['material'])
-            # If this is a secret symmetric key, ensure it has the
-            # expected type.
-            if 'store' in secret_key['operations']:
-                secret_key['material'] = bytes.__new__(
-                    bcl.secret,
-                    secret_key['material']
+        # Validate and normalize/wrap the key material.
+        material = dictionary.get('material')
+
+        if operations.get('store'):
+            # A symmetric key (to encrypt individual values or secret shares)
+            # is expected.
+            if not isinstance(material, str):
+                raise TypeError(
+                    'operations specification requires key material to be a string'
                 )
-        else:
-            # Secret key for Paillier encryption.
-            secret_key['material'] = tuple.__new__(
-                pailliers.secret,
-                (
-                    int(dictionary['material']['l']),
-                    int(dictionary['material']['m']),
-                    int(dictionary['material']['n']),
-                    int(dictionary['material']['g'])
+
+            buffer = _unpack(material)
+            if len(buffer) != 32:
+                raise ValueError('key material must have a length of 32 bytes')
+
+            # Wrap the key material in the expected symmetric key class.
+            secret_key['material'] = bytes.__new__(bcl.secret, buffer)
+
+        elif operations.get('match'):
+            # A salt for hashing is expected.
+            if not isinstance(material, str):
+                raise TypeError(
+                    'operations specification requires key material to be a string'
                 )
-            )
+
+            buffer = _unpack(material)
+            if len(buffer) != 64:
+                raise ValueError('key material must have a length of 64 bytes')
+
+            secret_key['material'] = buffer
+
+        elif operations.get('sum') and len(cluster['nodes']) == 1:
+            # Paillier secret key (to support summation-compatible encryption for
+            # single-node clusters) is expected.
+            if not isinstance(material, dict):
+                raise TypeError(
+                    'operations specification requires key material to be a dictionary'
+                )
+
+            if not all(parameter in material for parameter in 'lmng'):
+                raise ValueError(
+                    'key material must contain all required parameters'
+                )
+
+            if not all(
+                isinstance(material[parameter], str)
+                for parameter in ['l', 'm', 'n', 'g']
+            ):
+                raise TypeError('key material parameter values must be strings')
+
+            try:
+                parameters = tuple(int(material[parameter]) for parameter in 'lmng')
+            except Exception as exc:
+                raise ValueError(
+                    'key material parameter strings must be convertible to integer values'
+                ) from exc
+
+            # Checking that the material contents (provided as integers represent
+            # values that are within the correct range is the responsibility of the
+            # constructor from the imported library.
+            secret_key['material'] = tuple.__new__(pailliers.secret, parameters)
+
+        elif operations.get('sum') and len(cluster['nodes']) > 1:
+
+            # Node-specific masks for secret shares (to support summation-compatible
+            # encryption for multiple-node clusters) are expected.
+
+            if not isinstance(material, list):
+                raise TypeError(
+                    'operations specification requires key material to be a list'
+                )
+
+            if len(material) != len(cluster['nodes']):
+                raise ValueError(
+                    'cluster configuration requires key material to have length ' +
+                    str(len(cluster['nodes']))
+                )
+
+            # Ensure the masks are integers and that the integers are in the right
+            # range to represent multiplicative masks.
+            if not all(isinstance(k, int) for k in material):
+                raise TypeError('key material must contain integers')
+
+            if not all(
+                1 <= k < _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+                for k in material
+            ):
+                raise ValueError(
+                    'key material must contain integers within the correct range'
+                )
+
+            secret_key['material'] = material
 
         return secret_key
 
@@ -543,7 +737,7 @@ class ClusterKey(SecretKey):
     ) -> ClusterKey:
         """
         Return a cluster key built according to what is specified in the supplied
-        cluster configuration and operation specification.
+        cluster configuration and operations specification.
 
         :param cluster: Cluster configuration for this key.
         :param operations: Specification of supported operations on ciphertexts.
@@ -564,28 +758,28 @@ class ClusterKey(SecretKey):
         >>> ClusterKey.generate({'nodes': [{}]}, {'store': True})
         Traceback (most recent call last):
           ...
-        ValueError: cluster configuration must have at least two nodes
+        ValueError: cluster configuration must contain at least two nodes
         >>> ClusterKey.generate({'nodes': [{}, {}, {}]}, {'match': True})
         Traceback (most recent call last):
           ...
-        ValueError: creation of matching-compatible cluster keys is not supported
+        ValueError: cluster keys cannot support matching-compatible encryption
         """
-        # Create instance with default cluster configuration and operations
-        # specification, updating the configuration and specification with the
-        # supplied arguments.
-        cluster_key = ClusterKey(SecretKey.generate(cluster, operations, threshold))
+        _validate_cluster_configuration(cluster)
 
         if len(cluster['nodes']) == 1:
-            raise ValueError('cluster configuration must have at least two nodes')
+            raise ValueError('cluster configuration must contain at least two nodes')
+
+        _validate_operations_specification(operations)
 
         if operations.get('match'):
             raise ValueError(
-                'creation of matching-compatible cluster keys is not supported'
+                'cluster keys cannot support matching-compatible encryption'
             )
 
-        # Cluster keys contain no cryptographic material.
-        if 'material' in cluster_key:
-            del cluster_key['material']
+        _validate_key_attributes(cluster, operations, threshold)
+        
+        cluster_key = SecretKey(cluster, operations, threshold)
+        cluster_key.__class__ = ClusterKey
 
         return cluster_key
 
@@ -627,18 +821,39 @@ class ClusterKey(SecretKey):
         Traceback (most recent call last):
           ...
         TypeError: dictionary expected
+        >>> ClusterKey.load({
+        ...    'cluster': {'nodes': [{}, {}]},
+        ...    'operations': {'store': True},
+        ...    'material': 'abc'
+        ... })
+        Traceback (most recent call last):
+          ...
+        ValueError: cluster keys cannot contain key material
         """
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        cluster_key = ClusterKey({
-            'cluster': dictionary['cluster'],
-            'operations': dictionary['operations'],
-        })
-        if 'threshold' in dictionary:
-            cluster_key['threshold'] = dictionary['threshold']
+        cluster = dictionary.get('cluster')
+        _validate_cluster_configuration(cluster)
 
-        return cluster_key
+        if len(cluster['nodes']) == 1:
+            raise ValueError('cluster configuration must contain at least two nodes')
+
+        operations = dictionary.get('operations')
+        _validate_operations_specification(operations)
+
+        if operations.get('match'):
+            raise ValueError(
+                'cluster keys cannot support matching-compatible encryption'
+            )
+
+        threshold = dictionary.get('threshold')
+        _validate_key_attributes(cluster, operations, threshold)
+
+        if 'material' in dictionary:
+            raise ValueError('cluster keys cannot contain key material')
+
+        return ClusterKey(cluster, operations, threshold)
 
 class PublicKey(dict):
     """
@@ -661,30 +876,29 @@ class PublicKey(dict):
         >>> PublicKey.generate(ck)
         Traceback (most recent call last):
           ...
-        ValueError: cannot create public key for supplied secret key
+        TypeError: secret key material must be of the correct type
         >>> ck = ClusterKey.generate({'nodes': [{}, {}]}, {'sum': True})
         >>> PublicKey.generate(ck)
         Traceback (most recent call last):
           ...
         TypeError: secret key expected
         """
+        # No internal validation of the supplied secret key is performed 
+        # beyond what is necessary for the generation of this public key. 
+        # It is also assumed that the encapsulated key from the Paillier 
+        # cryptosystem library has valid internal structure.
+
         if isinstance(secret_key, ClusterKey) or not isinstance(secret_key, SecretKey):
             raise TypeError('secret key expected')
 
-        # Create instance with default cluster configuration and operations
-        # specification, updating the configuration and specification with the
-        # supplied arguments.
-        public_key = PublicKey({
+        if not isinstance(secret_key.get('material'), pailliers.secret):
+            raise TypeError('secret key material must be of the correct type')
+
+        return PublicKey({
             'cluster': secret_key['cluster'],
-            'operations': secret_key['operations']
+            'operations': secret_key['operations'],
+            'material': pailliers.public(secret_key['material'])
         })
-
-        if isinstance(secret_key['material'], pailliers.secret):
-            public_key['material'] = pailliers.public(secret_key['material'])
-        else:
-            raise ValueError('cannot create public key for supplied secret key')
-
-        return public_key
 
     def dump(self: PublicKey) -> dict:
         """
@@ -729,23 +943,63 @@ class PublicKey(dict):
         Traceback (most recent call last):
           ...
         TypeError: dictionary expected
+        >>> PublicKey.load({
+        ...    'cluster': {'nodes': [{}]},
+        ...    'operations': {'sum': True},
+        ...    'threshold': 3
+        ... })
+        Traceback (most recent call last):
+          ...
+        ValueError: public keys cannot specify a threshold
         """
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        public_key = PublicKey({
-            'cluster': dictionary['cluster'],
-            'operations': dictionary['operations'],
-        })
+        cluster = dictionary.get('cluster')
+        _validate_cluster_configuration(cluster)
 
-        # Public key for Paillier encryption.
-        public_key['material'] = tuple.__new__(
-            pailliers.public,
-            (
-                int(dictionary['material']['n']),
-                int(dictionary['material']['g'])
+        if len(cluster['nodes']) != 1:
+            raise ValueError(
+                'public keys are only supported for single-node clusters'
             )
-        )
+
+        operations = dictionary.get('operations')
+        _validate_operations_specification(operations)
+
+        if 'sum' not in operations:
+            raise ValueError('public keys can only support the sum operation')
+
+        if 'threshold' in dictionary:
+            raise ValueError('public keys cannot specify a threshold')
+
+        _validate_key_attributes(cluster, operations)
+
+        material = dictionary.get('material')
+
+        if not isinstance(material, dict):
+            raise TypeError('key material must be a dictionary')
+
+        if not ('n' in material and 'g' in material):
+            raise ValueError(
+                'key material does not contain all required parameters'
+            )
+
+        if not (isinstance(material['n'], str) and isinstance(material['g'], str)):
+            raise TypeError('key material dictionary values must be strings')
+
+        public_key = PublicKey({'cluster': cluster, 'operations': operations})
+
+        try:
+            parameters = tuple(int(material[parameter]) for parameter in 'ng')
+        except Exception as exc:
+            raise ValueError(
+                'key material parameter strings must be convertible to integer values'
+            ) from exc
+
+        # Checking that the material contents (provided as integers represent
+        # values that are within the correct range is the responsibility of the
+        # constructor from the imported library.
+        public_key['material'] = tuple.__new__(pailliers.public, parameters)
 
         return public_key
 

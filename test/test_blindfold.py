@@ -251,89 +251,441 @@ class TestKeysError(TestCase):
     """
     Tests of errors thrown by methods of cryptographic key classes.
     """
-    def test_secret_key_and_cluster_key_generation_errors(self):
+    def test_key_generation_errors(self):
         """
-        Test errors that can occur during both secret key and cluster key
-        generation.
+        Test errors that can occur during key generation.
         """
-        for Key in [
-            blindfold.SecretKey,
-            blindfold.ClusterKey
-        ]:
-            with pytest.raises(
-                ValueError,
-                match='valid cluster configuration expected'
-            ):
-                Key.generate(123, {'store': True})
+        # Cluster configuration errors.
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for ops in [{'store': True}, {'match': True}, {'sum': True}]:
+                with pytest.raises(
+                    TypeError,
+                    match='cluster configuration must be a dictionary'
+                ):
+                    Key.generate(123, ops)
 
-            with pytest.raises(
-                ValueError,
-                match='cluster configuration must contain at least one node'
-            ):
-                Key.generate(cluster(0), {'store': True})
+                with pytest.raises(
+                    ValueError,
+                    match='cluster configuration must specify nodes'
+                ):
+                    Key.generate({}, ops)
 
-            with pytest.raises(
-                ValueError,
-                match='valid operations specification expected'
-            ):
-                Key.generate(cluster(1), 123)
+                with pytest.raises(
+                    TypeError,
+                    match='cluster configuration node specification must be a sequence'
+                ):
+                    Key.generate({'nodes': 123}, ops)
 
-            with pytest.raises(
-                ValueError,
-                match='secret key must support exactly one operation'
-            ):
-                Key.generate(cluster(1), {})
+                with pytest.raises(
+                    ValueError,
+                    match='cluster configuration must contain at least one node'
+                ):
+                    Key.generate(cluster(0), ops)
 
-            with pytest.raises(
-                ValueError,
-                match='threshold must be a positive integer not larger than the cluster size'
-            ):
-                Key.generate(cluster(2), {'store': True}, threshold=0)
+                if Key == blindfold.ClusterKey and not ops.get('match'):
+                    with pytest.raises(
+                        ValueError,
+                        match='cluster configuration must contain at least two nodes'
+                    ):
+                        Key.generate(cluster(1), ops)
 
-            with pytest.raises(
-                ValueError,
-                match='threshold must be a positive integer not larger than the cluster size'
-            ):
-                Key.generate(cluster(2), {'store': True}, threshold=3)
+        # Operations specification errors.
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3, 4]:
+                if not (Key == blindfold.ClusterKey and n == 1):
+                    with pytest.raises(
+                        TypeError,
+                        match='operations specification must be a dictionary'
+                    ):
+                        Key.generate(cluster(n), 123)
 
-            with pytest.raises(
-                ValueError,
-                match='thresholds are only supported for multiple-node clusters'
-            ):
-                Key.generate(cluster(1), {'store': True}, threshold=1)
+                    with pytest.raises(
+                        ValueError,
+                        match='permitted operations are limited to store, match, and sum'
+                    ):
+                        Key.generate(cluster(n), {'foo': True})
 
-            with pytest.raises(
-                ValueError,
-                match='thresholds are only supported for the store and sum operations'
-            ):
-                Key.generate(cluster(2), {'match': True}, threshold=1)
+                    with pytest.raises(
+                        TypeError,
+                        match='operations specification values must be boolean'
+                    ):
+                        Key.generate(cluster(n), {'store': 123})
 
-    def test_cluster_key_generation_errors(self):
+                    with pytest.raises(
+                        ValueError,
+                        match='operations specification must designate exactly one operation'
+                    ):
+                        Key.generate(cluster(n), {})
+
+                    if Key == blindfold.ClusterKey and n >= 2:
+                        with pytest.raises(
+                            ValueError,
+                            match='cluster keys cannot support matching-compatible encryption'
+                        ):
+                            Key.generate(cluster(n), {'match': True})
+
+        # Threshold errors.
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3, 4]:
+                for ops in [{'store': True}, {'sum': True}]:
+                    if not (Key == blindfold.ClusterKey and n == 1):
+                        with pytest.raises(
+                            TypeError,
+                            match='threshold must be an integer'
+                        ):
+                            Key.generate(cluster(n), ops, threshold='abc')
+
+                    if Key == blindfold.SecretKey and n == 1:
+                        with pytest.raises(
+                            ValueError,
+                            match='thresholds are only supported for multiple-node clusters'
+                        ):
+                            Key.generate(cluster(n), ops, threshold=1)
+
+                    if n >= 2:
+                        for t in [2 - n, n + 1]:
+                            with pytest.raises(
+                                ValueError,
+                                match=(
+                                    'threshold must be a positive integer ' +
+                                    'not larger than the cluster size'
+                                )
+                            ):
+                                Key.generate(cluster(n), ops, threshold=t)
+
+                    if Key == blindfold.SecretKey and n >= 2:
+                        with pytest.raises(
+                            ValueError,
+                            match=(
+                                'thresholds are only supported for the store ' +
+                                'and sum operations'
+                            )
+                        ):
+                            Key.generate(cluster(n), {'match': True}, threshold=n)
+
+        # Seed errors.
+        for n in [1, 2, 3, 4]:
+            for ops in [{'store': True}, {'match': True}, {'sum': True}]:
+                with pytest.raises(
+                    TypeError,
+                    match='seed must be a bytes-like object or a string'
+                ):
+                    blindfold.SecretKey.generate(cluster(n), ops, seed=123)
+
+                if n == 1 and ops.get('sum'):
+                    with pytest.raises(
+                        ValueError,
+                        match=(
+                            'seed-based derivation of summation-compatible secret keys ' +
+                            'is not supported for single-node clusters'
+                        )
+                    ):
+                        blindfold.SecretKey.generate(cluster(n), ops, seed="ABC")
+
+        # Public key errors.
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3, 4]:
+                for ops in [{'store': True}, {'match': True}, {'sum': True}]:
+                    if not (Key == blindfold.ClusterKey and (n == 1 or ops.get('match'))):
+                        if Key == blindfold.ClusterKey:
+                            with pytest.raises(
+                                TypeError,
+                                match='secret key expected'
+                            ):
+                                key = Key.generate(cluster(n), ops)
+                                blindfold.PublicKey.generate(key)
+
+                        # Valid but incompatible secret keys.
+                        if Key == blindfold.SecretKey and not (n == 1 and ops.get('sum')):
+                            with pytest.raises(
+                                TypeError,
+                                match='secret key material must be of the correct type'
+                            ):
+                                key = Key.generate(cluster(n), ops)
+                                blindfold.PublicKey.generate(key)
+
+                        # Potentially compatible but malformed secret key.
+                        if Key == blindfold.SecretKey and n == 1 and ops.get('sum'):
+                            with pytest.raises(
+                                TypeError,
+                                match='secret key material must be of the correct type'
+                            ):
+                                key = Key.generate(cluster(n), ops)
+                                key['material'] = 123
+                                blindfold.PublicKey.generate(key)
+
+    def test_key_dumping_and_loading_errors(self):
         """
-        Test errors that can occur during cluster key generation.
+        Test errors that can occur during key dumping and loading (excluding
+        the errors that can occur due to checks performed within key generation
+        methods).
         """
+        # pylint: disable=too-many-statements
+
+        # Errors that can occur due to checks performed within key generation
+        # are not considered within these tests. The only exception is that a
+        # single test is included to ensure that the corresponding constructors
+        # or validation methods are invoked. These are identified via comments.
+
+        # Secret keys: invalid cluster configuration and operations specification.
+        for n in [1, 2, 3, 4]:
+            for ops in [{'store': True}, {'match': True}, {'sum': True}]:
+                # Check that cluster configuration validation is invoked.
+                with pytest.raises(
+                    TypeError,
+                    match='cluster configuration must be a dictionary'
+                ):
+                    sk_dict = blindfold.SecretKey.generate(cluster(n), ops).dump()
+                    del sk_dict['cluster']
+                    blindfold.SecretKey.load(sk_dict)
+
+                # Check that operation specification validation is invoked.
+                with pytest.raises(
+                    TypeError,
+                    match='operations specification must be a dictionary'
+                ):
+                    sk_dict = blindfold.SecretKey.generate(cluster(n), ops).dump()
+                    del sk_dict['operations']
+                    blindfold.SecretKey.load(sk_dict)
+
+                # Check that key attribute compatibility validation is invoked.
+                with pytest.raises(
+                    TypeError,
+                    match='threshold must be an integer'
+                ):
+                    sk_dict = blindfold.SecretKey.generate(cluster(n), ops).dump()
+                    sk_dict['threshold'] = "abc"
+                    blindfold.SecretKey.load(sk_dict)
+
+                # Check all material attribute type errors for the possible operations.
+                with pytest.raises(
+                    TypeError,
+                    match=(
+                        'operations specification requires key material to be a ' +
+                        (('dictionary' if n == 1 else 'list')  if 'sum' in ops else 'string')
+                    )
+                ):
+                    sk_dict = blindfold.SecretKey.generate(cluster(n), ops).dump()
+                    del sk_dict['material']
+                    blindfold.SecretKey.load(sk_dict)
+
+        # Secret keys: invalid material for matching and storage.
+        for n in [1, 2, 3, 4]:
+            with pytest.raises(
+                ValueError,
+                match='key material must have a length of 32 bytes'
+            ):
+                sk_store_dict = blindfold.SecretKey.generate(cluster(n), {'store': True}).dump()
+                sk_match_dict = blindfold.SecretKey.generate(cluster(n), {'match': True}).dump()
+                sk_store_dict['material'] = sk_match_dict['material']
+                blindfold.SecretKey.load(sk_store_dict)
+
+            with pytest.raises(
+                ValueError,
+                match='key material must have a length of 64 bytes'
+            ):
+                sk_store_dict = blindfold.SecretKey.generate(cluster(n), {'store': True}).dump()
+                sk_match_dict = blindfold.SecretKey.generate(cluster(n), {'match': True}).dump()
+                sk_match_dict['material'] = sk_store_dict['material']
+                blindfold.SecretKey.load(sk_match_dict)
+
+        # Secret keys: invalid material for summation on single-node clusters.
+        for parameter in ['l', 'm', 'n', 'g']:
+            with pytest.raises(
+                ValueError,
+                match='key material must contain all required parameters'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(1), {'sum': True}).dump()
+                del sk_dict['material'][parameter]
+                blindfold.SecretKey.load(sk_dict)
+
+            with pytest.raises(
+                TypeError,
+                match='key material parameter values must be strings'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(1), {'sum': True}).dump()
+                sk_dict['material'][parameter] = 123
+                blindfold.SecretKey.load(sk_dict)
+
+            with pytest.raises(
+                ValueError,
+                match='key material parameter strings must be convertible to integer values'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(1), {'sum': True}).dump()
+                sk_dict['material'][parameter] = 'abc'
+                blindfold.SecretKey.load(sk_dict)
+
+        # Secret keys: invalid material for summation on multiple-node clusters.
+        for n in [2, 3, 4]:
+            with pytest.raises(
+                TypeError,
+                match='perations specification requires key material to be a list'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(n), {'sum': True}).dump()
+                sk_dict['material'] = 123
+                blindfold.SecretKey.load(sk_dict)
+
+            with pytest.raises(
+                ValueError,
+                match='cluster configuration requires key material to have length ' + str(n)
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(n), {'sum': True}).dump()
+                sk_dict['material'].pop()
+                blindfold.SecretKey.load(sk_dict)
+
+            with pytest.raises(
+                TypeError,
+                match='key material must contain integers'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(n), {'sum': True}).dump()
+                sk_dict['material'][0] = 'abc'
+                blindfold.SecretKey.load(sk_dict)
+
+            with pytest.raises(
+                ValueError,
+                match='key material must contain integers within the correct range'
+            ):
+                sk_dict = blindfold.SecretKey.generate(cluster(n), {'sum': True}).dump()
+                sk_dict['material'][0] = 0 # Masks for secret shares must be nonzero.
+                blindfold.SecretKey.load(sk_dict)
+
+        # Cluster keys.
+        for n in [1, 2, 3, 4]:
+            for ops in [{'store': True}, {'match': True}, {'sum': True}]:
+                if n != 1 and not ops.get('match'):
+                    # Check that cluster configuration validation is invoked.
+                    with pytest.raises(
+                        TypeError,
+                        match='cluster configuration must be a dictionary'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(n), ops).dump()
+                        del ck_dict['cluster']
+                        blindfold.ClusterKey.load(ck_dict)
+
+                if n == 1 and not ops.get('match'):
+                    with pytest.raises(
+                        ValueError,
+                        match='cluster configuration must contain at least two nodes'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(2), ops).dump()
+                        ck_dict['cluster'] = cluster(n)
+                        blindfold.ClusterKey.load(ck_dict)
+
+                if n != 1 and not ops.get('match'):
+                    # Check that operations specification validation is invoked.
+                    with pytest.raises(
+                        TypeError,
+                        match='operations specification must be a dictionary'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(n), ops).dump()
+                        del ck_dict['operations']
+                        blindfold.ClusterKey.load(ck_dict)
+
+                if n != 1 and ops.get('match'):
+                    with pytest.raises(
+                        ValueError,
+                        match='cluster keys cannot support matching-compatible encryption'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(n), {'store': True}).dump()
+                        ck_dict['operations'] = ops
+                        blindfold.ClusterKey.load(ck_dict)
+
+                if n != 1 and not ops.get('match'):
+                    # Check that key attribute compatibility validation is invoked.
+                    with pytest.raises(
+                        TypeError,
+                        match='threshold must be an integer'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(n), ops).dump()
+                        ck_dict['threshold'] = "abc"
+                        blindfold.ClusterKey.load(ck_dict)
+
+                    with pytest.raises(
+                        ValueError,
+                        match='cluster keys cannot contain key material'
+                    ):
+                        ck_dict = blindfold.ClusterKey.generate(cluster(n), ops).dump()
+                        ck_dict['material'] = {}
+                        blindfold.ClusterKey.load(ck_dict)
+
+        # Public keys.
+
+        # Check that cluster configuration validation is invoked.
+        sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
+        with pytest.raises(
+            TypeError,
+            match='cluster configuration must be a dictionary'
+        ):
+            pk_dict = blindfold.PublicKey.generate(sk).dump()
+            del pk_dict['cluster']
+            blindfold.PublicKey.load(pk_dict)
+
+        # Check that operations specification validation is invoked.
+        with pytest.raises(
+            TypeError,
+            match='operations specification must be a dictionary'
+        ):
+            pk_dict = blindfold.PublicKey.generate(sk).dump()
+            del pk_dict['operations']
+            blindfold.PublicKey.load(pk_dict)
+
         with pytest.raises(
             ValueError,
-            match='cluster configuration must have at least two nodes'
+            match='public keys are only supported for single-node clusters'
         ):
-            blindfold.ClusterKey.generate(cluster(1), {'store': True})
+            pk_dict = blindfold.PublicKey.generate(sk).dump()
+            pk_dict['cluster'] = {'nodes': [{}, {}]}
+            blindfold.PublicKey.load(pk_dict)
+
+        for ops in [{'store': True}, {'match': True}]:
+            with pytest.raises(
+                ValueError,
+                match='public keys can only support the sum operation'
+            ):
+                pk_dict = blindfold.PublicKey.generate(sk).dump()
+                pk_dict['operations'] = ops
+                blindfold.PublicKey.load(pk_dict)
 
         with pytest.raises(
             ValueError,
-            match='creation of matching-compatible cluster keys is not supported'
+            match='public keys cannot specify a threshold'
         ):
-            blindfold.ClusterKey.generate(cluster(2), {'match': True})
+            pk_dict = blindfold.PublicKey.generate(sk).dump()
+            pk_dict['threshold'] = 1
+            blindfold.PublicKey.load(pk_dict)
 
-    def test_public_key_generation_errors(self):
-        """
-        Test errors that can occur during public key generation.
-        """
         with pytest.raises(
-            ValueError,
-            match='cannot create public key for supplied secret key'
+            TypeError,
+            match='key material must be a dictionary'
         ):
-            sk = blindfold.SecretKey.generate(cluster(2), {'sum': True})
-            blindfold.PublicKey.generate(sk)
+            pk_dict = blindfold.PublicKey.generate(sk).dump()
+            pk_dict['material'] = 123
+            blindfold.PublicKey.load(pk_dict)
+
+        for parameter in ['n', 'g']:
+            with pytest.raises(
+                ValueError,
+                match='key material does not contain all required parameters'
+            ):
+                pk_dict = blindfold.PublicKey.generate(sk).dump()
+                del pk_dict['material'][parameter]
+                blindfold.PublicKey.load(pk_dict)
+
+            with pytest.raises(
+                TypeError,
+                match='key material dictionary values must be strings'
+            ):
+                pk_dict = blindfold.PublicKey.generate(sk).dump()
+                pk_dict['material'][parameter] = 123
+                blindfold.PublicKey.load(pk_dict)
+
+            with pytest.raises(
+                ValueError,
+                match='key material parameter strings must be convertible to integer values'
+            ):
+                pk_dict = blindfold.PublicKey.generate(sk).dump()
+                pk_dict['material'][parameter] = 'abc'
+                blindfold.PublicKey.load(pk_dict)
 
 class TestFunctions(TestCase):
     """
