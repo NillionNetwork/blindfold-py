@@ -4,6 +4,7 @@ replies.
 """
 from __future__ import annotations
 from typing import Union, Optional, Sequence, Callable
+from abc import abstractmethod
 import doctest
 import base64
 import secrets
@@ -435,9 +436,36 @@ def _modulus(key: Union[SecretKey, ClusterKey], silent: bool = False) -> int:
 
     raise ValueError('scheme associated with key has no modulus')
 
-class SecretKey(dict):
+class _Key(dict):
+    """
+    Parent class for all key classes.
+    """
+    def __init__(self, *args, **kwargs):
+        """
+        Constructor definition prevents users from instantiating a key using a
+        constructor.
+        """
+        if self.__class__.__name__ != '_Key':
+            raise RuntimeError('keys must be instantiated using the generate method')
+
+        super().__init__(*args, **kwargs)
+
+    @abstractmethod
+    def dump(self):
+        """
+        All subtypes must implement a method that return a JSON-compatible
+        dictionary representation of the key instance.
+        """
+
+class SecretKey(_Key):
     """
     Data structure for representing all categories of secret key instances.
+    Instantiation must be performed using the :obj:`generate` method.
+
+    >>> SecretKey()
+    Traceback (most recent call last):
+      ...
+    RuntimeError: keys must be instantiated using the generate method
     """
 
     _paillier_key_length: int = _PAILLIER_KEY_LENGTH
@@ -506,7 +534,8 @@ class SecretKey(dict):
         _validate_operations_specification(operations)
         _validate_key_attributes(cluster, operations, threshold)
 
-        secret_key = SecretKey({'cluster': cluster, 'operations': operations})
+        secret_key = _Key({'cluster': cluster, 'operations': operations})
+        secret_key.__class__ = SecretKey # Constructor disabled to mirror TypeScript.
         if threshold is not None:
             secret_key['threshold'] = threshold
 
@@ -621,7 +650,8 @@ class SecretKey(dict):
         threshold = dictionary.get('threshold')
         _validate_key_attributes(cluster, operations, threshold)
 
-        secret_key = SecretKey({'cluster': cluster, 'operations': operations})
+        secret_key = _Key({'cluster': cluster, 'operations': operations})
+        secret_key.__class__ = SecretKey # Constructor disabled to mirror TypeScript.
         if threshold is not None:
             secret_key['threshold'] = threshold
 
@@ -669,10 +699,7 @@ class SecretKey(dict):
                     'key material must contain all required parameters'
                 )
 
-            if not all(
-                isinstance(material[parameter], str)
-                for parameter in ['l', 'm', 'n', 'g']
-            ):
+            if not all(isinstance(material[parameter], str) for parameter in 'lmng'):
                 raise TypeError('key material parameter values must be strings')
 
             try:
@@ -688,7 +715,6 @@ class SecretKey(dict):
             secret_key['material'] = tuple.__new__(pailliers.secret, parameters)
 
         elif operations.get('sum') and len(cluster['nodes']) > 1:
-
             # Node-specific masks for secret shares (to support summation-compatible
             # encryption for multiple-node clusters) are expected.
 
@@ -720,9 +746,15 @@ class SecretKey(dict):
 
         return secret_key
 
-class ClusterKey(dict):
+class ClusterKey(_Key):
     """
     Data structure for representing all categories of cluster key instances.
+    Instantiation must be performed using the :obj:`generate` method.
+
+    >>> ClusterKey()
+    Traceback (most recent call last):
+      ...
+    RuntimeError: keys must be instantiated using the generate method
     """
     @staticmethod
     def generate( # pylint: disable=arguments-differ # Seeds not supported.
@@ -773,7 +805,8 @@ class ClusterKey(dict):
 
         _validate_key_attributes(cluster, operations, threshold)
         
-        cluster_key = ClusterKey({'cluster': cluster, 'operations': operations})
+        cluster_key = _Key({'cluster': cluster, 'operations': operations})
+        cluster_key.__class__ = ClusterKey # Constructor disabled to mirror TypeScript.
         if threshold is not None:
             cluster_key['threshold'] = threshold
 
@@ -846,7 +879,8 @@ class ClusterKey(dict):
         threshold = dictionary.get('threshold')
         _validate_key_attributes(cluster, operations, threshold)
 
-        cluster_key = ClusterKey({'cluster': cluster, 'operations': operations})
+        cluster_key = _Key({'cluster': cluster, 'operations': operations})
+        cluster_key.__class__ = ClusterKey # Constructor disabled to mirror TypeScript.
         if threshold is not None:
             cluster_key['threshold'] = threshold
 
@@ -855,9 +889,15 @@ class ClusterKey(dict):
 
         return cluster_key
 
-class PublicKey(dict):
+class PublicKey(_Key):
     """
     Data structure for representing all categories of public key instances.
+    Instantiation must be performed using the :obj:`generate` method.
+
+    >>> PublicKey()
+    Traceback (most recent call last):
+      ...
+    RuntimeError: keys must be instantiated using the generate method
     """
     @staticmethod
     def generate(secret_key: SecretKey) -> PublicKey:
@@ -894,30 +934,31 @@ class PublicKey(dict):
         if not isinstance(secret_key.get('material'), pailliers.secret):
             raise TypeError('secret key material must be of the correct type')
 
-        return PublicKey({
+        public_key = _Key({
             'cluster': secret_key['cluster'],
             'operations': secret_key['operations'],
             'material': pailliers.public(secret_key['material'])
         })
+        public_key.__class__ = PublicKey # Constructor disabled to mirror TypeScript.
+
+        return public_key
 
     def dump(self: PublicKey) -> dict:
         """
         Return a JSON-compatible dictionary representation of this key
         instance. This method complements the :obj:`load` method.
         """
-        dictionary = {
+        return {
             'material': {},
             'cluster': self['cluster'],
             'operations': self['operations'],
-        }
 
-        # Public key for Paillier encryption.
-        dictionary['material'] = {
-            'n': str(self['material'][0]),
-            'g': str(self['material'][1])
+            # Public key for Paillier encryption.
+            'material': {
+                'n': str(self['material'][0]),
+                'g': str(self['material'][1])
+            }
         }
-
-        return dictionary
 
     @staticmethod
     def load(dictionary: dict) -> PublicKey:
@@ -974,7 +1015,8 @@ class PublicKey(dict):
 
         _validate_key_attributes(cluster, operations)
 
-        public_key = PublicKey({'cluster': cluster, 'operations': operations})
+        public_key = _Key({'cluster': cluster, 'operations': operations})
+        public_key.__class__ = PublicKey # Constructor disabled to mirror TypeScript.
 
         # Validate and normalize/wrap the key material.
         material = dictionary.get('material')
@@ -987,8 +1029,8 @@ class PublicKey(dict):
                 'key material does not contain all required parameters'
             )
 
-        if not (isinstance(material['n'], str) and isinstance(material['g'], str)):
-            raise TypeError('key material dictionary values must be strings')
+        if not all(isinstance(material[parameter], str) for parameter in 'ng'):
+            raise TypeError('key material parameter values must be strings')
 
         try:
             parameters = tuple(int(material[parameter]) for parameter in 'ng')

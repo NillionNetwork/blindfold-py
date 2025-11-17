@@ -249,7 +249,7 @@ class TestKeys(TestCase):
 
 class TestKeysError(TestCase):
     """
-    Tests of errors thrown by methods of cryptographic key classes.
+    Tests of errors raised by methods of cryptographic key classes.
     """
     def test_key_generation_errors(self):
         """
@@ -609,9 +609,9 @@ class TestKeysError(TestCase):
                         blindfold.ClusterKey.load(ck_dict)
 
         # Public keys.
+        sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
 
         # Check that cluster configuration validation is invoked.
-        sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
         with pytest.raises(
             TypeError,
             match='cluster configuration must be a dictionary'
@@ -673,7 +673,7 @@ class TestKeysError(TestCase):
 
             with pytest.raises(
                 TypeError,
-                match='key material dictionary values must be strings'
+                match='key material parameter values must be strings'
             ):
                 pk_dict = blindfold.PublicKey.generate(sk).dump()
                 pk_dict['material'][parameter] = 123

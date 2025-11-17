@@ -67,16 +67,29 @@ autodoc_member_order = 'bysource'
 autodoc_default_options = {
     'special-members': True,
     'exclude-members': ','.join([
-        '__annotations__',
-        '__weakref__',
         '__module__',
+        '__dict__',
         '__hash__',
-        '__dict__'
+        '__weakref__',
+        '__annotations__'
     ])
 }
 autodoc_preserve_defaults = True
+autodoc_class_signature = 'separated'
 autodoc_typehints = 'description'
 autodoc_typehints_description_target = 'documented'
+
+# Replace private class with its public parent type in list of base classes
+# for key classes.
+
+def autodoc_process_bases_handler(app, name, obj, options, bases):
+    bases[:] = [
+        ':obj:`dict`' if base.__qualname__ == '_Key' else base
+        for base in bases
+    ]
+
+def setup(app):
+    app.connect('autodoc-process-bases', autodoc_process_bases_handler)
 
 # Allow references/links to definitions found in the Python documentation
 # and in the documentation for this package's dependencies.
