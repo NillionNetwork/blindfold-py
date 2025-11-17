@@ -374,6 +374,67 @@ def _validate_key_attributes(
                 'thresholds are only supported for the store and sum operations'
             )
 
+def _modulus(key: Union[SecretKey, ClusterKey], silent: bool = False) -> int:
+    """
+    Return the modulus governing the domain of plaintexts of the Paillier,
+    additive, or Shamir's scheme corresponding to the supplied key instance.
+
+    :param key: Key for which to determine the modulus.
+    :param silent: Return ``None`` if there is no associated modulus.
+
+    The optional argument ``silent`` can be used to ensure this method
+    returns ``None`` if the scheme associated with a key instance has no
+    modulus.
+
+    >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, 2)
+    >>> isinstance(_modulus(sk), int)
+    True
+    >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
+    >>> isinstance(_modulus(sk), int)
+    True
+    >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
+    >>> isinstance(_modulus(sk), int)
+    True
+    >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, 2)
+    >>> isinstance(_modulus(sk), int)
+    True
+    >>> _modulus(SecretKey.generate(
+    ...     {'nodes': [{}]},
+    ...     {'store': True}
+    ... ), True) is None
+    True
+
+    If the ``silent`` argument is not ``True`` and no modulus is associated
+    with this instance, an exception is raised.
+
+    >>> _modulus(SecretKey.generate({'nodes': [{}]}, {'store': True}))
+    Traceback (most recent call last):
+      ...
+    ValueError: scheme associated with key has no modulus
+    >>> _modulus(SecretKey.generate({'nodes': [{}, {}]}, {'store': True}))
+    Traceback (most recent call last):
+      ...
+    ValueError: scheme associated with key has no modulus
+    >>> _modulus(SecretKey.generate({'nodes': [{}]}, {'match': True}))
+    Traceback (most recent call last):
+      ...
+    ValueError: scheme associated with key has no modulus
+    """
+    if isinstance(key.get('threshold'), int):
+        return _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+
+    if key.get('operations').get('sum'):
+        return (
+            key.get('material')[2]
+            if len(key['cluster']['nodes']) == 1 else
+            _SECRET_SHARED_SIGNED_INTEGER_MODULUS
+        )
+
+    if silent:
+        return None
+
+    raise ValueError('scheme associated with key has no modulus')
+
 class SecretKey(dict):
     """
     Data structure for representing all categories of secret key instances.
@@ -384,26 +445,6 @@ class SecretKey(dict):
     Static parameter for Paillier cryptosystem (introduced in order to allow
     modification in tests).
     """
-
-    def __init__(
-        self: SecretKey,
-        cluster: dict,
-        operations: dict,
-        threshold: Optional[int] = None
-    ):
-        """
-        Create an instance of a secret key after checking that all arguments are valid.
-        """
-        _validate_cluster_configuration(cluster)
-        _validate_operations_specification(operations)
-        _validate_key_attributes(cluster, operations, threshold)
-
-        self['cluster'] = cluster
-        self['operations'] = operations
-
-        if threshold is not None:
-            self['threshold'] = threshold
-
     @staticmethod
     def generate(
         cluster: dict,
@@ -461,7 +502,13 @@ class SecretKey(dict):
           ...
         ValueError: seed-based ... summation-compatible ... not supported for single-node ...
         """
-        secret_key = SecretKey(cluster, operations, threshold)
+        _validate_cluster_configuration(cluster)
+        _validate_operations_specification(operations)
+        _validate_key_attributes(cluster, operations, threshold)
+
+        secret_key = SecretKey({'cluster': cluster, 'operations': operations})
+        if threshold is not None:
+            secret_key['threshold'] = threshold
 
         if seed is not None and not isinstance(seed, (bytes, bytearray, str)):
             raise TypeError('seed must be a bytes-like object or a string')
@@ -470,7 +517,7 @@ class SecretKey(dict):
         if isinstance(seed, str):
             seed = seed.encode()
 
-        if secret_key['operations'].get('store'):
+        if operations.get('store'):
             # Symmetric key for encrypting the plaintext or the shares of a plaintext.
             secret_key['material'] = (
                 bcl.symmetric.secret()
@@ -478,12 +525,12 @@ class SecretKey(dict):
                 bytes.__new__(bcl.secret, _random_bytes(32, seed))
             )
 
-        if secret_key['operations'].get('match'):
+        if operations.get('match'):
             # Salt for deterministic hashing of the plaintext.
             secret_key['material'] = _random_bytes(64, seed)
 
-        if secret_key['operations'].get('sum'):
-            if len(secret_key['cluster']['nodes']) == 1:
+        if operations.get('sum'):
+            if len(cluster['nodes']) == 1:
                 # Paillier secret key for encrypting a plaintext integer value.
                 if seed is not None:
                     raise ValueError(
@@ -503,70 +550,10 @@ class SecretKey(dict):
                             None
                         )
                     )
-                    for i in range(len(secret_key['cluster']['nodes']))
+                    for i in range(len(cluster['nodes']))
                 ]
 
         return secret_key
-
-    def _modulus(self: SecretKey, silent: bool = False) -> int:
-        """
-        Return the modulus governing the domain of plaintexts of the Paillier,
-        additive, or Shamir's scheme corresponding to this key instance.
-
-        :param silent: Return ``None`` if there is no associated modulus.
-
-        The optional argument ``silent`` can be used to ensure this method
-        returns ``None`` if the scheme associated with a key instance has no
-        modulus.
-
-        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'store': True}, 2)
-        >>> isinstance(sk._modulus(), int)
-        True
-        >>> sk = SecretKey.generate({'nodes': [{}]}, {'sum': True})
-        >>> isinstance(sk._modulus(), int)
-        True
-        >>> sk = SecretKey.generate({'nodes': [{}, {}]}, {'sum': True})
-        >>> isinstance(sk._modulus(), int)
-        True
-        >>> sk = SecretKey.generate({'nodes': [{}, {}, {}]}, {'sum': True}, 2)
-        >>> isinstance(sk._modulus(), int)
-        True
-        >>> SecretKey.generate(
-        ...     {'nodes': [{}]},
-        ...     {'store': True}
-        ... )._modulus(True) is None
-        True
-
-        If the ``silent`` argument is not ``True`` and no modulus is associated
-        with this instance, an exception is raised.
-
-        >>> SecretKey.generate({'nodes': [{}]}, {'store': True})._modulus()
-        Traceback (most recent call last):
-          ...
-        ValueError: scheme associated with key has no modulus
-        >>> SecretKey.generate({'nodes': [{}, {}]}, {'store': True})._modulus()
-        Traceback (most recent call last):
-          ...
-        ValueError: scheme associated with key has no modulus
-        >>> SecretKey.generate({'nodes': [{}]}, {'match': True})._modulus()
-        Traceback (most recent call last):
-          ...
-        ValueError: scheme associated with key has no modulus
-        """
-        if isinstance(self.get('threshold'), int):
-            return _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-
-        if self.get('operations').get('sum'):
-            return (
-                self.get('material')[2]
-                if len(self['cluster']['nodes']) == 1 else
-                _SECRET_SHARED_SIGNED_INTEGER_MODULUS
-            )
-
-        if silent:
-            return None
-
-        raise ValueError('scheme associated with key has no modulus')
 
     def dump(self: SecretKey) -> dict:
         """
@@ -626,9 +613,17 @@ class SecretKey(dict):
             raise TypeError('dictionary expected')
 
         cluster = dictionary.get('cluster')
+        _validate_cluster_configuration(cluster)
+
         operations = dictionary.get('operations')
+        _validate_operations_specification(operations)
+
         threshold = dictionary.get('threshold')
-        secret_key = SecretKey(cluster, operations, threshold)
+        _validate_key_attributes(cluster, operations, threshold)
+
+        secret_key = SecretKey({'cluster': cluster, 'operations': operations})
+        if threshold is not None:
+            secret_key['threshold'] = threshold
 
         # Validate and normalize/wrap the key material.
         material = dictionary.get('material')
@@ -725,7 +720,7 @@ class SecretKey(dict):
 
         return secret_key
 
-class ClusterKey(SecretKey):
+class ClusterKey(dict):
     """
     Data structure for representing all categories of cluster key instances.
     """
@@ -778,8 +773,9 @@ class ClusterKey(SecretKey):
 
         _validate_key_attributes(cluster, operations, threshold)
         
-        cluster_key = SecretKey(cluster, operations, threshold)
-        cluster_key.__class__ = ClusterKey
+        cluster_key = ClusterKey({'cluster': cluster, 'operations': operations})
+        if threshold is not None:
+            cluster_key['threshold'] = threshold
 
         return cluster_key
 
@@ -850,10 +846,14 @@ class ClusterKey(SecretKey):
         threshold = dictionary.get('threshold')
         _validate_key_attributes(cluster, operations, threshold)
 
+        cluster_key = ClusterKey({'cluster': cluster, 'operations': operations})
+        if threshold is not None:
+            cluster_key['threshold'] = threshold
+
         if 'material' in dictionary:
             raise ValueError('cluster keys cannot contain key material')
 
-        return ClusterKey(cluster, operations, threshold)
+        return cluster_key
 
 class PublicKey(dict):
     """
@@ -888,7 +888,7 @@ class PublicKey(dict):
         # It is also assumed that the encapsulated key from the Paillier 
         # cryptosystem library has valid internal structure.
 
-        if isinstance(secret_key, ClusterKey) or not isinstance(secret_key, SecretKey):
+        if not isinstance(secret_key, SecretKey):
             raise TypeError('secret key expected')
 
         if not isinstance(secret_key.get('material'), pailliers.secret):
@@ -974,6 +974,9 @@ class PublicKey(dict):
 
         _validate_key_attributes(cluster, operations)
 
+        public_key = PublicKey({'cluster': cluster, 'operations': operations})
+
+        # Validate and normalize/wrap the key material.
         material = dictionary.get('material')
 
         if not isinstance(material, dict):
@@ -986,8 +989,6 @@ class PublicKey(dict):
 
         if not (isinstance(material['n'], str) and isinstance(material['g'], str)):
             raise TypeError('key material dictionary values must be strings')
-
-        public_key = PublicKey({'cluster': cluster, 'operations': operations})
 
         try:
             parameters = tuple(int(material[parameter]) for parameter in 'ng')
@@ -1600,7 +1601,7 @@ def decrypt(
         # Field elements in the "upper half" of the fields used for the Paillier,
         # additive and Shamir's schemes represent negative integers.
         if plaintext > _PLAINTEXT_SIGNED_INTEGER_MAX:
-            plaintext -= key._modulus() # pylint: disable=protected-access
+            plaintext -= _modulus(key)
 
         return plaintext
 

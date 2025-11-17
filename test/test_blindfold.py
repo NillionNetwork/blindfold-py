@@ -1385,9 +1385,9 @@ class TestSecureComputations(TestCase):
         (b0, b1, b2) = blindfold.encrypt(sk, 456)
         (c0, c1, c2) = blindfold.encrypt(sk, 789)
         (r0, r1, r2) = (
-            ((2 * a0) + (-1 * b0) + c0) % sk._modulus(),
-            ((2 * a1) + (-1 * b1) + c1) % sk._modulus(),
-            ((2 * a2) + (-1 * b2) + c2) % sk._modulus()
+            ((2 * a0) + (-1 * b0) + c0) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+            ((2 * a1) + (-1 * b1) + c1) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS,
+            ((2 * a2) + (-1 * b2) + c2) % _SECRET_SHARED_SIGNED_INTEGER_MODULUS
         )
 
         decrypted = blindfold.decrypt(sk, [r0, r1, r2])
@@ -1404,10 +1404,10 @@ class TestSecureComputations(TestCase):
         ys = [shamirs.share(*s) for s in blindfold.encrypt(sk, 456)]
         zs = [shamirs.share(*s) for s in blindfold.encrypt(sk, 789)]
         rs = shamirs.add(
-            shamirs.mul(xs, 2, modulus=sk._modulus()),
-            shamirs.mul(ys, -1, modulus=sk._modulus()),
+            shamirs.mul(xs, 2, modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS),
+            shamirs.mul(ys, -1, modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS),
             zs,
-            modulus=sk._modulus()
+            modulus=_SECRET_SHARED_SIGNED_INTEGER_MODULUS
         )
 
         decrypted = blindfold.decrypt(sk, rs)
