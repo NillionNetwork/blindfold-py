@@ -3,7 +3,8 @@ Python library for working with encrypted data within nilDB queries and
 replies.
 """
 from __future__ import annotations
-from typing import Union, Optional, Sequence, Callable
+from typing import Union, Optional
+from collections.abc import Callable, Sequence
 from abc import abstractmethod
 import doctest
 import base64
@@ -217,97 +218,111 @@ def _decode(value: Union[bytes, bytearray]) -> Union[int, str, bytes]:
 
     raise ValueError('cannot decode value')
 
-def _validate_cluster_configuration(cluster: dict):
+class Cluster(dict):
     """
-    Ensure the provided cluster configuration is valid.
-
-    :param cluster: Cluster configuration.
-
-    A configuration must satisfy independent requirements that govern its type
-    and what keys/values it must have.
-
-    >>> _validate_cluster_configuration([{}, {}, {}])
-    Traceback (most recent call last):
-      ...
-    TypeError: cluster configuration must be a dictionary
-    >>> _validate_cluster_configuration({})
-    Traceback (most recent call last):
-      ...
-    ValueError: cluster configuration must specify nodes
-    >>> _validate_cluster_configuration({'nodes': 123})
-    Traceback (most recent call last):
-      ...
-    TypeError: cluster configuration node specification must be a sequence
-    >>> _validate_cluster_configuration({'nodes': []})
-    Traceback (most recent call last):
-      ...
-    ValueError: cluster configuration must contain at least one node
-
-    This function does not check the supplied arguments against requirements
-    for particular key types. Those checks are performed within the methods
-    of specific key classes.
+    Cluster configuration information that at minimum specifies the number of
+    nodes in a cluster (but may contain other information about cluster nodes).
     """
-    # Check the cluster configuration.
-    if not isinstance(cluster, dict):
-        raise TypeError('cluster configuration must be a dictionary')
+    def __init__(self: Cluster, cluster: dict):
+        """
+        Ensure the provided cluster configuration is valid and create an
+        instance of the wrapper class.
 
-    if 'nodes' not in cluster:
-        raise ValueError('cluster configuration must specify nodes')
+        :param cluster: Cluster configuration.
 
-    if not isinstance(cluster['nodes'], Sequence):
-        raise TypeError(
-            'cluster configuration node specification must be a sequence'
-        )
+        A configuration must satisfy independent requirements that govern its type
+        and what keys/values it must have.
 
-    if len(cluster['nodes']) < 1:
-        raise ValueError('cluster configuration must contain at least one node')
+        >>> Cluster([{}, {}, {}])
+        Traceback (most recent call last):
+          ...
+        TypeError: cluster configuration must be a dictionary
+        >>> Cluster({})
+        Traceback (most recent call last):
+          ...
+        ValueError: cluster configuration must specify nodes
+        >>> Cluster({'nodes': 123})
+        Traceback (most recent call last):
+          ...
+        TypeError: cluster configuration node specification must be a sequence
+        >>> Cluster({'nodes': []})
+        Traceback (most recent call last):
+          ...
+        ValueError: cluster configuration must contain at least one node
 
-def _validate_operations_specification(operations: dict):
+        This function does not check the supplied arguments against requirements
+        for particular key types. Those checks are performed within the methods
+        of specific key classes.
+        """
+        if not isinstance(cluster, dict):
+            raise TypeError('cluster configuration must be a dictionary')
+
+        if 'nodes' not in cluster:
+            raise ValueError('cluster configuration must specify nodes')
+
+        if not isinstance(cluster['nodes'], Sequence):
+            raise TypeError(
+                'cluster configuration node specification must be a sequence'
+            )
+
+        if len(cluster['nodes']) < 1:
+            raise ValueError('cluster configuration must contain at least one node')
+        
+        self.update(cluster)
+
+class Operations(dict):
     """
-    Ensure the provided operations specification is valid.
-
-    :param specification: Operations specification.
-
-    A specification must satisfy independent requirements that govern its type
-    and what keys/values it must have.
-
-    >>> _validate_operations_specification([])
-    Traceback (most recent call last):
-      ...
-    TypeError: operations specification must be a dictionary
-    >>> _validate_operations_specification({'foo': True})
-    Traceback (most recent call last):
-      ...
-    ValueError: permitted operations are limited to store, match, and sum
-    >>> _validate_operations_specification({'store': 123})
-    Traceback (most recent call last):
-      ...
-    TypeError: operations specification values must be boolean
-    >>> _validate_operations_specification({'store': True, 'sum': True})
-    Traceback (most recent call last):
-      ...
-    ValueError: operations specification must designate exactly one operation
-
-    This function does not check the supplied arguments against requirements
-    for particular key types. Those checks are performed within the methods
-    of specific key classes.
+    Specification identifying what operations on ciphertexts a key supports.
     """
-    # Check the operations specification.
-    if not isinstance(operations, dict):
-        raise TypeError('operations specification must be a dictionary')
+    def __init__(self: Operations, specification: dict):
+        """
+        Ensure the provided operations specification is valid and create an
+        instance of the wrapper class.
 
-    if not set(operations.keys()).issubset({'store', 'match', 'sum'}):
-        raise ValueError(
-            'permitted operations are limited to store, match, and sum'
-        )
+        :param specification: Operations specification.
 
-    if not all(isinstance(value, bool) for value in operations.values()):
-        raise TypeError('operations specification values must be boolean')
+        A specification must satisfy independent requirements that govern its type
+        and what keys/values it must have.
 
-    if len([op for (op, status) in operations.items() if status]) != 1:
-        raise ValueError(
-            'operations specification must designate exactly one operation'
-        )
+        >>> Operations([])
+        Traceback (most recent call last):
+          ...
+        TypeError: operations specification must be a dictionary
+        >>> Operations({'foo': True})
+        Traceback (most recent call last):
+          ...
+        ValueError: permitted operations are limited to store, match, and sum
+        >>> Operations({'store': 123})
+        Traceback (most recent call last):
+          ...
+        TypeError: operations specification values must be boolean
+        >>> Operations({'store': True, 'sum': True})
+        Traceback (most recent call last):
+          ...
+        ValueError: operations specification must designate exactly one operation
+
+        This function does not check the supplied arguments against requirements
+        for particular key types. Those checks are performed within the methods
+        of specific key classes.
+        """
+        # Check the operations specification.
+        if not isinstance(specification, dict):
+            raise TypeError('operations specification must be a dictionary')
+
+        if not set(specification.keys()).issubset({'store', 'match', 'sum'}):
+            raise ValueError(
+                'permitted operations are limited to store, match, and sum'
+            )
+
+        if not all(isinstance(value, bool) for value in specification.values()):
+            raise TypeError('operations specification values must be boolean')
+
+        if len([op for (op, status) in specification.items() if status]) != 1:
+            raise ValueError(
+                'operations specification must designate exactly one operation'
+            )
+
+        self.update(specification)
 
 def _validate_key_attributes(
         cluster: dict,
@@ -530,8 +545,8 @@ class SecretKey(_Key):
           ...
         ValueError: seed-based ... summation-compatible ... not supported for single-node ...
         """
-        _validate_cluster_configuration(cluster)
-        _validate_operations_specification(operations)
+        cluster = Cluster(cluster)
+        operations = Operations(operations)
         _validate_key_attributes(cluster, operations, threshold)
 
         secret_key = _Key({'cluster': cluster, 'operations': operations})
@@ -641,12 +656,8 @@ class SecretKey(_Key):
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        cluster = dictionary.get('cluster')
-        _validate_cluster_configuration(cluster)
-
-        operations = dictionary.get('operations')
-        _validate_operations_specification(operations)
-
+        cluster = Cluster(dictionary.get('cluster'))
+        operations = Operations(dictionary.get('operations'))
         threshold = dictionary.get('threshold')
         _validate_key_attributes(cluster, operations, threshold)
 
@@ -791,12 +802,12 @@ class ClusterKey(_Key):
           ...
         ValueError: cluster keys cannot support matching-compatible encryption
         """
-        _validate_cluster_configuration(cluster)
+        cluster = Cluster(cluster)
 
         if len(cluster['nodes']) == 1:
             raise ValueError('cluster configuration must contain at least two nodes')
 
-        _validate_operations_specification(operations)
+        operations = Operations(operations)
 
         if operations.get('match'):
             raise ValueError(
@@ -862,14 +873,12 @@ class ClusterKey(_Key):
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        cluster = dictionary.get('cluster')
-        _validate_cluster_configuration(cluster)
+        cluster = Cluster(dictionary.get('cluster'))
 
         if len(cluster['nodes']) == 1:
             raise ValueError('cluster configuration must contain at least two nodes')
 
-        operations = dictionary.get('operations')
-        _validate_operations_specification(operations)
+        operations = Operations(dictionary.get('operations'))
 
         if operations.get('match'):
             raise ValueError(
@@ -996,16 +1005,14 @@ class PublicKey(_Key):
         if not isinstance(dictionary, dict):
             raise TypeError('dictionary expected')
 
-        cluster = dictionary.get('cluster')
-        _validate_cluster_configuration(cluster)
+        cluster = Cluster(dictionary.get('cluster'))
 
         if len(cluster['nodes']) != 1:
             raise ValueError(
                 'public keys are only supported for single-node clusters'
             )
 
-        operations = dictionary.get('operations')
-        _validate_operations_specification(operations)
+        operations = Operations(dictionary.get('operations'))
 
         if 'sum' not in operations:
             raise ValueError('public keys can only support the sum operation')

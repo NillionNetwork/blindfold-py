@@ -3,7 +3,8 @@ Test suite containing functional unit tests of exported functions. Click on a
 **[source]** link beside any test method to view the examples found in that
 particular test.
 """
-from typing import Union, Set, Sequence
+from typing import Union
+from collections.abc import Sequence
 from unittest import TestCase
 from importlib import import_module
 import functools
@@ -60,7 +61,7 @@ def to_hash_base64(output: Union[bytes, list[int]]) -> str:
 
     return base64.b64encode(hashlib.sha256(output).digest()).decode('ascii')
 
-def cluster(size: int) -> Sequence[Set]:
+def cluster(size: int) -> blindfold.Cluster:
     """
     Return a cluster configuration of the specified size.
     """
@@ -76,6 +77,7 @@ class TestAPI(TestCase):
         """
         module = import_module('blindfold.blindfold')
         self.assertTrue({
+            'Cluster', 'Operations',
             'SecretKey', 'ClusterKey', 'PublicKey',
             'encrypt', 'decrypt', 'allot', 'unify'
         }.issubset(module.__dict__.keys()))
