@@ -45,6 +45,24 @@ _PLAINTEXT_INTEGER_VALUES: Sequence[int] = [
 Sequence of plaintext integer values used across multiple tests.
 """
 
+_PLAINTEXT_STRING_VALUES: Sequence[str] = [
+    "x" * length
+    for length in [
+        0, 1, 3, 5, 10, 50, 256, 385, 500, 1000, 2000,
+        _PLAINTEXT_STRING_BUFFER_LEN_MAX
+    ]
+]
+"""
+Sequence of plaintext string values used across multiple tests.
+"""
+
+_PLAINTEXT_BYTES_VALUES: Sequence[bytes] = [
+    bytes(0), bytearray([123]), bytes([123] * _PLAINTEXT_STRING_BUFFER_LEN_MAX)
+]
+"""
+Sequence of plaintext binary values used across multiple tests.
+"""
+
 # Modify the Paillier secret key length to reduce running time of tests.
 blindfold.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
 
@@ -67,6 +85,12 @@ def cluster(size: int) -> blindfold.Cluster:
     """
     return {'nodes': [{} for _ in range(size)]}
 
+def thresholds(n: int) -> Sequence[int]:
+    """
+    Return an array of valid threshold values for a given cluster size.
+    """
+    return [] if n == 1 else [None] + list(range(1, n + 1))
+
 class TestAPI(TestCase):
     """
     Test that the exported classes and functions match the expected API.
@@ -82,6 +106,23 @@ class TestAPI(TestCase):
             'encrypt', 'decrypt', 'allot', 'unify'
         }.issubset(module.__dict__.keys()))
 
+def common_key_methods_dump_load(
+        test_case: TestCase,
+        Key: type, # pylint: disable=invalid-name
+        key: Union[blindfold.SecretKey, blindfold.ClusterKey]
+    ):
+    """
+    Common pattern for testing dump/load methods of cryptographic key classes.
+    """
+    key_from_dict = Key.load(key.dump())
+    test_case.assertTrue(isinstance(key_from_dict, Key))
+    test_case.assertEqual(key_from_dict, key)
+
+    key_from_json = Key.load(json.loads(json.dumps(key.dump())))
+    test_case.assertTrue(isinstance(key_from_json, Key))
+    test_case.assertEqual(key_from_json, key)
+
+
 class TestKeys(TestCase):
     """
     Tests of methods of cryptographic key classes.
@@ -90,35 +131,20 @@ class TestKeys(TestCase):
         """
         Test key generate, dump, JSONify, and load for the store operation.
         """
-        for (Key, cluster_, threshold) in [
-            (blindfold.SecretKey, cluster(1), None),
-            (blindfold.SecretKey, cluster(3), None),
-            (blindfold.SecretKey, cluster(3), 1),
-            (blindfold.SecretKey, cluster(3), 2),
-            (blindfold.ClusterKey, cluster(3), None),
-            (blindfold.ClusterKey, cluster(3), 1),
-            (blindfold.ClusterKey, cluster(3), 2)
-        ]:
-            key = Key.generate(cluster_, {'store': True}, threshold)
-            key_loaded = Key.load(key.dump())
-            self.assertTrue(isinstance(key, Key))
-            self.assertEqual(key_loaded, key)
-
-            key_from_json = Key.load(json.loads(json.dumps(key.dump())))
-            self.assertEqual(key_from_json, key)
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                if not (Key == blindfold.ClusterKey and n == 1):
+                    for t in thresholds(n):
+                        key = Key.generate(cluster(n), {'store': True}, t)
+                        common_key_methods_dump_load(self, Key, key)
 
     def test_key_operations_for_match(self):
         """
         Test key generate, dump, JSONify, and load methods for the match operation.
         """
-        for cluster_ in [cluster(1), cluster(3)]:
-            sk = blindfold.SecretKey.generate(cluster_, {'match': True})
-            sk_loaded = blindfold.SecretKey.load(sk.dump())
-            self.assertTrue(isinstance(sk, blindfold.SecretKey))
-            self.assertEqual(sk_loaded, sk)
-
-            key_from_json = blindfold.SecretKey.load(json.loads(json.dumps(sk.dump())))
-            self.assertEqual(key_from_json, sk)
+        for n in [1, 2, 3]:
+            sk = blindfold.SecretKey.generate(cluster(n), {'match': True})
+            common_key_methods_dump_load(self, blindfold.SecretKey, sk)
 
     def test_key_operations_for_sum_with_single_node(self):
         """
@@ -126,41 +152,21 @@ class TestKeys(TestCase):
         with a single node.
         """
         sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
-        sk_loaded = blindfold.SecretKey.load(sk.dump())
-        self.assertTrue(isinstance(sk, blindfold.SecretKey))
-        self.assertEqual(sk_loaded, sk)
-
-        sk_from_json = blindfold.SecretKey.load(json.loads(json.dumps(sk.dump())))
-        self.assertEqual(sk_from_json, sk)
-
+        common_key_methods_dump_load(self, blindfold.SecretKey, sk)
         pk = blindfold.PublicKey.generate(sk)
-        pk_loaded = blindfold.PublicKey.load(pk.dump())
-        self.assertTrue(isinstance(pk, blindfold.PublicKey))
-        self.assertEqual(pk_loaded, pk)
-
-        pk_from_json = blindfold.PublicKey.load(json.loads(json.dumps(pk.dump())))
-        self.assertEqual(pk_from_json, pk)
+        common_key_methods_dump_load(self, blindfold.PublicKey, pk)
 
     def test_key_operations_for_sum_with_multiple_nodes(self):
         """
         Test key generate, dump, JSONify, and load methods for the sum operation
         with multiple (without/with threshold) nodes.
         """
-        for (Key, cluster_, threshold) in [
-            (blindfold.SecretKey, cluster(3), None),
-            (blindfold.SecretKey, cluster(3), 2),
-            (blindfold.SecretKey, cluster(3), 3),
-            (blindfold.ClusterKey, cluster(3), None),
-            (blindfold.ClusterKey, cluster(3), 2),
-            (blindfold.ClusterKey, cluster(3), 3)
-        ]:
-            key = Key.generate(cluster_, {'sum': True}, threshold)
-            key_loaded = Key.load(key.dump())
-            self.assertTrue(isinstance(key, Key))
-            self.assertEqual(key_loaded, key)
-
-            key_from_json = Key.load(json.loads(json.dumps(key.dump())))
-            self.assertEqual(key_from_json, key)
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                if not (Key == blindfold.ClusterKey and n == 1):
+                    for t in thresholds(n):
+                        key = Key.generate(cluster(n), {'sum': True}, t)
+                        common_key_methods_dump_load(self, Key, key)
 
     def test_secret_key_from_seed_for_store(self):
         """
@@ -168,40 +174,33 @@ class TestKeys(TestCase):
         node and multiple (without/with threshold) nodes.
         """
         for seed in _SEED_VALUES:
-            for (cluster_, threshold) in [
-                (cluster(1), None),
-                (cluster(3), 1),
-                (cluster(3), 2),
-                (cluster(3), 3)
-            ]:
-                sk_from_seed = blindfold.SecretKey.generate(
-                    cluster_,
-                    {'store': True},
-                    threshold,
-                    seed
-                )
-                self.assertEqual(
-                    to_hash_base64(sk_from_seed['material']),
-                    '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
-                )
-                sk = blindfold.SecretKey.generate(
-                    cluster_,
-                    {'store': True},
-                    threshold
-                )
-                self.assertNotEqual(
-                    to_hash_base64(sk['material']),
-                    '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
-                )
+            for n in [1, 2, 3]:
+                for t in thresholds(n):
+                    sk_from_seed = blindfold.SecretKey.generate(
+                        cluster(n),
+                        {'store': True},
+                        t,
+                        seed
+                    )
+                    self.assertEqual(
+                        to_hash_base64(sk_from_seed['material']),
+                        '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
+                    )
+
+                    sk = blindfold.SecretKey.generate(cluster(n), {'store': True}, t)
+                    self.assertNotEqual(
+                        to_hash_base64(sk['material']),
+                        '2bW6BLeeCTqsCqrijSkBBPGjDb/gzjtGnFZt0nsZP8w='
+                    )
 
     def test_secret_key_from_seed_for_match(self):
         """
         Test key generation from seed for the match operation with a single node.
         """
         for seed in _SEED_VALUES:
-            for cluster_ in [cluster(1), cluster(3)]:
+            for n in [1, 2, 3]:
                 sk_from_seed = blindfold.SecretKey.generate(
-                    cluster_,
+                    cluster(n),
                     {'match': True},
                     seed=seed
                 )
@@ -209,7 +208,8 @@ class TestKeys(TestCase):
                     to_hash_base64(sk_from_seed['material']),
                     'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
                 )
-                sk = blindfold.SecretKey.generate(cluster_, {'match': True})
+
+                sk = blindfold.SecretKey.generate(cluster(n), {'match': True})
                 self.assertNotEqual(
                     to_hash_base64(sk['material']),
                     'qbcFGTOGTPo+vs3EChnVUWk5lnn6L6Cr/DIq8li4H+4='
@@ -227,11 +227,11 @@ class TestKeys(TestCase):
               (4, 'xUiGGrAEfTZpNl2aIe2V+Vk+HCSTElREbeXNV/hePJg='),
               (5, '4k7lscMoSb8WOcIcChURfE6GfIe5gN+Hc3MiQeD4tKI='),
             ]:
-                for threshold in [None] + list(range(1, n + 1)):
+                for t in thresholds(n):
                     sk_from_seed = blindfold.SecretKey.generate(
                         cluster(n),
                         {'sum': True},
-                        threshold,
+                        t,
                         seed=seed
                     )
                     self.assertEqual(
@@ -239,11 +239,7 @@ class TestKeys(TestCase):
                         hash_from_material
                     )
 
-                    sk = blindfold.SecretKey.generate(
-                        cluster(n),
-                        {'sum': True},
-                        threshold
-                    )
+                    sk = blindfold.SecretKey.generate(cluster(n), {'sum': True}, t)
                     self.assertNotEqual(
                         to_hash_base64(sk['material']),
                         hash_from_material
@@ -698,53 +694,55 @@ class TestFunctions(TestCase):
         Test encryption and decryption for the store operation with single/multiple
         nodes and without/with threshold (including subcluster combinations).
         """
-        for (cluster_, threshold, combinations) in [
-            (cluster(1), None, [{0}]),
-            (cluster(3), None, [{0, 1, 2}]),
+        for (n, t, combinations) in [
+            (1, None, [{0}]),
+            (2, None, [{0, 1}]),
+            (3, None, [{0, 1, 2}]),
 
             # Scenarios with thresholds but no missing shares.
-            (cluster(3), 1, [{0, 1, 2}]),
-            (cluster(3), 2, [{0, 1, 2}]),
-            (cluster(3), 3, [{0, 1, 2}]),
+            (2, 1, [{0, 1}]),
+            (2, 2, [{0, 1}]),
+            (3, 1, [{0, 1, 2}]),
+            (3, 2, [{0, 1, 2}]),
+            (3, 3, [{0, 1, 2}]),
 
             # Scenarios with thresholds and missing shares.
-            (cluster(3), 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
-            (cluster(3), 2, [{1, 2}, {0, 1}, {0, 2}]),
-            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
-            (cluster(4), 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
-            (cluster(5), 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
-            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
-            (cluster(5), 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
+            (2, 1, [{0}, {1}]),
+            (3, 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
+            (3, 2, [{1, 2}, {0, 1}, {0, 2}]),
+            (4, 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
+            (4, 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
+            (5, 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
+            (5, 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
+            (5, 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
         ]:
-            for Key in ( # Test cluster keys only for multiple-node clusters.
-                [blindfold.SecretKey] +
-                [blindfold.ClusterKey] if len(cluster_['nodes']) > 1 else []
-            ):
-                key = Key.generate(cluster_, {'store': True}, threshold)
-                for plaintext in (
-                    _PLAINTEXT_INTEGER_VALUES +
-                    ['', 'abc', 'X' * _PLAINTEXT_STRING_BUFFER_LEN_MAX] +
-                    [bytes(0), bytearray([123]), bytes([123] * _PLAINTEXT_STRING_BUFFER_LEN_MAX)]
-                ):
-                    ciphertext = blindfold.encrypt(key, plaintext)
-                    for combination in combinations:
-                        decrypted = blindfold.decrypt(
-                            key,
-                            (
-                                ciphertext
-                                if threshold is None else
-                                [ciphertext[i] for i in combination]
+            for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+                if not (n == 1 and Key == blindfold.ClusterKey):
+                    key = Key.generate(cluster(n), {'store': True}, t)
+                    for plaintext in (
+                        _PLAINTEXT_INTEGER_VALUES +
+                        _PLAINTEXT_INTEGER_VALUES +
+                        _PLAINTEXT_BYTES_VALUES
+                    ):
+                        ciphertext = blindfold.encrypt(key, plaintext)
+                        for combination in combinations:
+                            decrypted = blindfold.decrypt(
+                                key,
+                                (
+                                    ciphertext
+                                    if t is None else
+                                    [ciphertext[i] for i in combination]
+                                )
                             )
-                        )
-                        self.assertEqual(decrypted, plaintext)
+                            self.assertEqual(decrypted, plaintext)
 
     def test_encrypt_for_match(self):
         """
         Test encryption for the match operation.
         """
-        for cluster_ in [cluster(1), cluster(3)]:
-            sk_a = blindfold.SecretKey.generate(cluster_, {'match': True})
-            sk_b = blindfold.SecretKey.generate(cluster_, {'match': True})
+        for n in [1, 2, 3]:
+            sk_a = blindfold.SecretKey.generate(cluster(n), {'match': True})
+            sk_b = blindfold.SecretKey.generate(cluster(n), {'match': True})
 
             for (plaintext_one, plaintext_two, comparison) in [
                 (123, 123, True),
@@ -784,41 +782,43 @@ class TestFunctions(TestCase):
         Test encryption and decryption for the sum operation with single/multiple
         nodes and without/with threshold (including subcluster combinations).
         """
-        for (cluster_, threshold, combinations) in [
-            (cluster(1), None, [{0}]),
-            (cluster(3), None, [{0, 1, 2}]),
+        for (n, t, combinations) in [
+            (1, None, [{0}]),
+            (2, None, [{0, 1}]),
+            (3, None, [{0, 1, 2}]),
 
             # Scenarios with thresholds but no missing shares.
-            (cluster(3), 1, [{0, 1, 2}]),
-            (cluster(3), 2, [{0, 1, 2}]),
-            (cluster(3), 3, [{0, 1, 2}]),
+            (2, 1, [{0, 1}]),
+            (2, 2, [{0, 1}]),
+            (3, 1, [{0, 1, 2}]),
+            (3, 2, [{0, 1, 2}]),
+            (3, 3, [{0, 1, 2}]),
 
             # Scenarios with thresholds and missing shares.
-            (cluster(3), 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
-            (cluster(3), 2, [{0, 1}, {1, 2}, {0, 2}]),
-            (cluster(4), 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
-            (cluster(4), 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
-            (cluster(5), 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
-            (cluster(5), 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
-            (cluster(5), 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
+            (2, 1, [{0}, {1}]),
+            (3, 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
+            (3, 2, [{1, 2}, {0, 1}, {0, 2}]),
+            (4, 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
+            (4, 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
+            (5, 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
+            (5, 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
+            (5, 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
         ]:
-            for Key in ( # Test cluster keys only for multiple-node clusters.
-                [blindfold.SecretKey] +
-                [blindfold.ClusterKey] if len(cluster_['nodes']) > 1 else []
-            ):
-                key = Key.generate(cluster_, {'sum': True}, threshold)
-                for plaintext in _PLAINTEXT_INTEGER_VALUES:
-                    ciphertext = blindfold.encrypt(key, plaintext)
-                    for combination in combinations:
-                        decrypted = blindfold.decrypt(
-                            key,
-                            (
-                                ciphertext
-                                if threshold is None else
-                                [ciphertext[i] for i in combination]
+            for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+                if not (n == 1 and Key == blindfold.ClusterKey):
+                    key = Key.generate(cluster(n), {'sum': True}, t)
+                    for plaintext in _PLAINTEXT_INTEGER_VALUES:
+                        ciphertext = blindfold.encrypt(key, plaintext)
+                        for combination in combinations:
+                            decrypted = blindfold.decrypt(
+                                key,
+                                (
+                                    ciphertext
+                                    if t is None else
+                                    [ciphertext[i] for i in combination]
+                                )
                             )
-                        )
-                        self.assertEqual(decrypted, plaintext)
+                            self.assertEqual(decrypted, plaintext)
 
 class TestRepresentations(TestCase):
     """
@@ -831,8 +831,9 @@ class TestRepresentations(TestCase):
         """
         plaintext = 'abc'
         sk = blindfold.SecretKey.load({
-            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
-            'cluster': cluster(1), 'operations': {'store': True}
+            'cluster': cluster(1),
+            'operations': {'store': True},
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
         for seed in _SEED_VALUES:
             self.assertEqual(
@@ -858,9 +859,9 @@ class TestRepresentations(TestCase):
         self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
         sk = blindfold.SecretKey.load({
-            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
             'cluster': cluster(3),
-            'operations': {'store': True}
+            'operations': {'store': True},
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
         for seed in _SEED_VALUES:
             self.assertEqual(
@@ -894,10 +895,10 @@ class TestRepresentations(TestCase):
         self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
         sk = blindfold.SecretKey.load({
-            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q=',
             'cluster': cluster(3),
             'operations': {'store': True},
-            'threshold': 2
+            'threshold': 2,
+            'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
         for seed in _SEED_VALUES:
             self.assertEqual(
@@ -923,6 +924,8 @@ class TestRepresentations(TestCase):
         """
         plaintext = 123
         sk = blindfold.SecretKey.load({
+            'cluster': cluster(1),
+            'operations': {'sum': True},
             'material':{
                 'l': (
                     '17180710124328693910455057887214184059303187053517283200908251615178685092277'
@@ -943,9 +946,7 @@ class TestRepresentations(TestCase):
                     '21844769070633792102283544209510902482137967535730134757715877943631913072743'
                     '01123732060710963981670091105550908978777514231236658174687534680701412538826'
                 )
-            },
-            'cluster': cluster(1),
-            'operations': {'sum': True}
+            }
         })
         ciphertext = (
             '55869d61244f52780793eeb7c79b1a681b1c54536041f6703073c93f1e45da8208'
@@ -971,9 +972,9 @@ class TestRepresentations(TestCase):
         self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
         sk = blindfold.SecretKey.load({
-            'material': [2677312581, 321207441, 2186773557],
             'cluster': cluster(3),
-            'operations': {'sum': True}
+            'operations': {'sum': True},
+            'material': [2677312581, 321207441, 2186773557]
         })
         for seed in _SEED_VALUES:
             self.assertEqual(
@@ -1003,10 +1004,10 @@ class TestRepresentations(TestCase):
         self.assertEqual(blindfold.decrypt(ck, ciphertext), plaintext)
 
         sk = blindfold.SecretKey.load({
-            'material': [2677312581, 321207441, 2186773557],
             'cluster': cluster(3),
             'operations': {'sum': True},
-            'threshold': 2
+            'threshold': 2,
+            'material': [2677312581, 321207441, 2186773557]
         })
         for seed in _SEED_VALUES:
             self.assertEqual(
@@ -1354,7 +1355,7 @@ class TestSecureComputations(TestCase):
     # pylint: disable=protected-access # To access ``SecretKey._modulus`` method.
     def test_workflow_for_secure_sum_mul_with_single_node(self):
         """
-        Test secure summation workflow for a cluster that has a single node.
+        Test secure summation workflow with a cluster that has a single node.
         """
         sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
         pk = blindfold.PublicKey.generate(sk)
@@ -1379,7 +1380,7 @@ class TestSecureComputations(TestCase):
 
     def test_workflow_for_secure_sum_mul_with_multiple_nodes(self):
         """
-        Test secure summation workflow for a cluster that has multiple nodes.
+        Test secure summation workflow with a cluster that has multiple nodes.
         """
         sk = blindfold.SecretKey.generate(cluster(3), {'sum': True})
 
@@ -1397,8 +1398,8 @@ class TestSecureComputations(TestCase):
 
     def test_workflow_for_secure_sum_mul_with_multiple_nodes_with_threshold(self):
         """
-        Test secure summation workflow with a threshold for a cluster that has
-        multiple nodes.
+        Test secure summation workflow with a cluster that has multiple nodes
+        (with a threshold).
         """
         sk = blindfold.SecretKey.generate(cluster(3), {'sum': True}, threshold=2)
 

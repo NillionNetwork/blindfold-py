@@ -1187,12 +1187,12 @@ def encrypt(
             shares.append(optional_enc(_xor(aggregate, buffer)))
             return list(map(_pack, shares))
 
-        # For multiple-node clusters and a threshold, the plaintext is secret-shared
-        # using Shamir's secret sharing (with each share symmetrically encrypted in
-        # the case of a secret key).
+        # For multiple-node clusters and a threshold, the plaintext is converted
+        # into secret shares using Shamir's secret sharing scheme (with each share
+        # symmetrically encrypted in the case of a secret key).
         padding = 4 - (len(buffer) % 4) # Padding to make length a multiple of four.
-        buffer = bytes([255] * padding) + buffer # Pad until length is a multiple of four.
-        subarrays = list(parts(buffer, length=4)) # Split into subarrays of length four.
+        padded = bytes([255] * padding) + buffer # Pad until length is a multiple of four.
+        subarrays = list(parts(padded, length=4)) # Split into subarrays of length four.
 
         # Build up shares of the plaintext where each share is actually a list of
         # shares (one such share per subarray of the plaintext).
@@ -1221,7 +1221,7 @@ def encrypt(
             # always the same and in the same order). Therefore, the index is
             # only stored once to reduce its overhead.
             index = share_of_array[0][0].to_bytes(4, byteorder='little', signed=False)
-            share_of_array_as_bytes = bytes(0) + index
+            share_of_array_as_bytes = index
             for subarray_share in share_of_array:
                 value = subarray_share[1].to_bytes(5, byteorder='little', signed=False)
                 share_of_array_as_bytes = share_of_array_as_bytes + value
