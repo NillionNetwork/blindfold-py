@@ -64,7 +64,7 @@ Sequence of plaintext binary values used across multiple tests.
 """
 
 # Modify the Paillier secret key length to reduce running time of tests.
-blindfold.SecretKey._paillier_key_length = 256 # pylint: disable=protected-access
+blindfold.SecretKey._paillier_prime_bit_length = 256 # pylint: disable=protected-access
 
 def to_hash_base64(output: Union[bytes, list[int]]) -> str:
     """
@@ -1088,10 +1088,13 @@ class TestCiphertextSizes(TestCase):
         for plaintext in _PLAINTEXT_INTEGER_VALUES:
             sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
             pk = blindfold.PublicKey.generate(sk)
-            self.assertLessEqual(
+            # The ciphertext's bit length is four times as large as the bit length
+            # of the primes generated for the secret key. This bit length is then
+            # divided by four to determine the length of its hex representation.
+            self.assertEqual(
                 len(blindfold.encrypt(pk, plaintext)),
                 # pylint: disable=protected-access
-                blindfold.SecretKey._paillier_key_length
+                ((blindfold.SecretKey._paillier_prime_bit_length * 4) // 4)
             )
 
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:

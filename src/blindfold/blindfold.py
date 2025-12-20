@@ -16,7 +16,7 @@ import bcl
 import shamirs
 import pailliers
 
-_PAILLIER_KEY_LENGTH: int = 2048
+_PAILLIER_PRIME_BIT_LENGTH: int = 2048
 """Length in bits of Paillier keys."""
 
 _SECRET_SHARED_SIGNED_INTEGER_MODULUS: int = (2 ** 32) + 15
@@ -483,7 +483,7 @@ class SecretKey(_Key):
     RuntimeError: keys must be instantiated using the generate method
     """
 
-    _paillier_key_length: int = _PAILLIER_KEY_LENGTH
+    _paillier_prime_bit_length: int = _PAILLIER_PRIME_BIT_LENGTH
     """
     Static parameter for Paillier cryptosystem (introduced in order to allow
     modification in tests).
@@ -581,7 +581,9 @@ class SecretKey(_Key):
                         'seed-based derivation of summation-compatible secret keys ' +
                         'is not supported for single-node clusters'
                     )
-                secret_key['material'] = pailliers.secret(SecretKey._paillier_key_length)
+                secret_key['material'] = pailliers.secret(
+                    SecretKey._paillier_prime_bit_length
+                )
             else:
                 # Distinct multiplicative mask for each share.
                 secret_key['material'] = [
@@ -1249,11 +1251,18 @@ def encrypt(
         # For single-node clusters, the Paillier cryptosystem is used. Only a
         # Paillier secret or public key can be used to encrypt for summation.
         if len(key['cluster']['nodes']) == 1:
-            return hex(pailliers.encrypt(
+            ciphertext = hex(pailliers.encrypt(
               # Support encryption with either a public or secret key.
               (key if isinstance(key, PublicKey) else PublicKey.generate(key))['material'],
               plaintext
-            ))[2:] # Drop '0x' prefix.
+            ))[2:] # Remove ``'0x'`` prefix.
+
+            # The ciphertext's bit length is four times as large as the bit length
+            # of the primes generated for the secret key. This bit length is then
+            # divided by four to determine the length of its hex representation.
+            # The ciphertext is then padded to always have the same length (in case
+            # the underlying integer happens to have a shorter representation).
+            return ciphertext.zfill((SecretKey._paillier_prime_bit_length * 4) // 4)
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
         if 'threshold' not in key:
