@@ -71,29 +71,29 @@ Categories of Encryption Keys
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. |SecretKey| replace:: ``SecretKey``
-.. _SecretKey: https://blindfold.readthedocs.io/en/1.0.0rc0/_source/blindfold.html#blindfold.blindfold.SecretKey
+.. _SecretKey: https://blindfold.readthedocs.io/en/1.0.0/_source/blindfold.html#blindfold.blindfold.SecretKey
 
 .. |ClusterKey| replace:: ``ClusterKey``
-.. _ClusterKey: https://blindfold.readthedocs.io/en/1.0.0rc0/_source/blindfold.html#blindfold.blindfold.ClusterKey
+.. _ClusterKey: https://blindfold.readthedocs.io/en/1.0.0/_source/blindfold.html#blindfold.blindfold.ClusterKey
 
 .. |PublicKey| replace:: ``PublicKey``
-.. _PublicKey: https://blindfold.readthedocs.io/en/1.0.0rc0/_source/blindfold.html#blindfold.blindfold.PublicKey
+.. _PublicKey: https://blindfold.readthedocs.io/en/1.0.0/_source/blindfold.html#blindfold.blindfold.PublicKey
 
 This library uses the attributes of a key object (instantiated using an appropriate constructor) to determine what protocol to use when encrypting a plaintext. Keys fall into one of two categories:
 
-1. |SecretKey|_/|PublicKey|_: Keys in this category support operations within a single node or across multiple nodes. These contain cryptographic material for encryption, decryption, and other operations. Notably, a |SecretKey|_ instance includes cryptographic material (such as symmetric keys) that a client should not share with the cluster. Using a |SecretKey|_ instance helps ensure that a client can retain exclusive access to a plaintext *even if all servers in a cluster collude*. 
+1. |SecretKey|_/|PublicKey|_: Keys in this category support operations within a single node or across multiple nodes. These contain cryptographic material for encryption, decryption, and other operations. Notably, a |SecretKey|_ instance includes cryptographic material (such as symmetric keys) that a client should not share with the cluster. Using a |SecretKey|_ instance helps ensure that a client can retain exclusive access to a plaintext *even if all servers in a cluster collude*.
 
 2. |ClusterKey|_: Keys in this category represent cluster configurations but do not contain cryptographic material. These can be used only when working with multiple-node clusters. Unlike |SecretKey|_ and |PublicKey|_ instances, |ClusterKey|_ instances do not incorporate additional cryptographic material. This means each node in a cluster has access to a raw secret share of the plaintext and, therefore, the plaintext is only protected if the nodes in the cluster do not collude.
 
 More Details on Secret Sharing
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-When working with multiple-node clusters and encrypting data for compatibility with the store operation using a |SecretKey|_ instance, each secret share is encrypted  using a symmetric key (the material for which is stored inside the |SecretKey|_ instance). However, when encrypting for compatibility with the sum operation (without or with a threshold), each secret share is instead *masked* via multiplication with a secret nonzero scalar (with one secret scalar per node stored in the |SecretKey|_ instance). While this ensures that the secret-shared plaintexts encrypted in this way are compatible with addition and scalar multiplication, users should use this feature only if they have a thorough understanding of the privacy and security trade-offs involved.
+When working with multiple-node clusters and encrypting data for compatibility with the store operation using a |SecretKey|_ instance, each secret share is encrypted using a symmetric key (the material for which is stored inside the |SecretKey|_ instance). However, when encrypting for compatibility with the sum operation (without or with a threshold), each secret share is instead *masked* via multiplication with a secret nonzero scalar (with one secret scalar per node stored in the |SecretKey|_ instance). While this ensures that the secret-shared plaintexts encrypted in this way are compatible with addition and scalar multiplication, users should use this feature only if they have a thorough understanding of the privacy and security trade-offs involved.
 
 Threshold secret sharing is supported when encrypting for multiple-node clusters (with the exception of encrypting for compatibility with the match operation). A threshold specifies the minimum number of nodes required to reconstruct the original data. Shamir's secret sharing is employed when encrypting with support for a threshold, ensuring that encrypted data can only be decrypted if the required number of shares is available.
 
 Ciphertext Overheads
 ^^^^^^^^^^^^^^^^^^^^
-The table below presents tight upper bounds on ciphertext sizes (in bytes) for each supported protocol when it is used to encrypt a plaintext having *k* bytes. For multiple-node protocols, the size of the ciphertext delivered to an individual node is reported (excluding any overheads associated with the container type within which separate ciphertext components such as the share index and value reside). The upper bounds below are `checked within the testing script <https://blindfold.readthedocs.io/en/1.0.0rc0/_source/test_blindfold.html#test.test_blindfold.TestCiphertextSizes>`__.
+The table below presents tight upper bounds on ciphertext sizes (in bytes) for each supported protocol when it is used to encrypt a plaintext having *k* bytes. For multiple-node protocols, the size of the ciphertext delivered to an individual node is reported (excluding any overheads associated with the container type within which separate ciphertext components such as the share index and value reside). The upper bounds below are `checked within the testing script <https://blindfold.readthedocs.io/en/1.0.0/_source/test_blindfold.html#test.test_blindfold.TestCiphertextSizes>`__.
 
 +------------+---------------------+-------------------------------------------------------+-------------+
 | Cluster    | Operation           | Exact Upper Bound in Bytes                            | Approx.     |
@@ -121,7 +121,7 @@ The table below presents tight upper bounds on ciphertext sizes (in bytes) for e
 
 Examples
 ^^^^^^^^
-Extensive documentation, examples, and developer tools that can assist anyone interested in using this library are available in the `Nillion Docs on Private Storage with nilDB <https://docs.nillion.com/build/private-storage/overview>`__. Numerous examples can also be found within docstrings in the library's `source code <https://blindfold.readthedocs.io/en/1.0.0rc0/_source/blindfold.html>`__ and in its `testing script <https://blindfold.readthedocs.io/en/1.0.0rc0/_source/test_blindfold.html>`__.
+Extensive documentation, examples, and developer tools that can assist anyone interested in using this library are available in the `Nillion Docs on Private Storage with nilDB <https://docs.nillion.com/build/private-storage/overview>`__. Numerous examples can also be found within docstrings in the library's `source code <https://blindfold.readthedocs.io/en/1.0.0/_source/blindfold.html>`__ and in its `testing script <https://blindfold.readthedocs.io/en/1.0.0/_source/test_blindfold.html>`__.
 
 The example below generates a |SecretKey|_ instance for encrypting data to be stored within a single-node cluster:
 
@@ -151,8 +151,8 @@ The example below generates three secret shares of an integer and then reconstru
 
 .. code-block:: python
 
-    >>> secret_key = blindfold.SecretKey.generate({
-    ...     'nodes': [{}, {}, {}]},
+    >>> secret_key = blindfold.SecretKey.generate(
+    ...     {'nodes': [{}, {}, {}]},
     ...     {'sum': True},
     ...     threshold=2
     ... )
