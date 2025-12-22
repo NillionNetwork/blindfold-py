@@ -220,90 +220,94 @@ def _decode(value: Union[bytes, bytearray]) -> Union[int, str, bytes]:
 
 class Cluster(dict):
     """
-    Cluster configuration information that at minimum specifies the number of
-    nodes in a cluster (but may contain other information about cluster nodes).
+    Data structure for representing cluster configuration information that at
+    minimum specifies the number of nodes in a cluster (but that may contain
+    other information about cluster nodes).
+
+    :param configuration: Cluster configuration.
+
+    A configuration must satisfy independent requirements that govern its type
+    and what keys and values it must have. The constructor ensures that the
+    provided cluster configuration is valid and creates an instance of the
+    class. 
+
+    >>> Cluster([{}, {}, {}])
+    Traceback (most recent call last):
+      ...
+    TypeError: cluster configuration must be a dictionary
+    >>> Cluster({})
+    Traceback (most recent call last):
+      ...
+    ValueError: cluster configuration must specify nodes
+    >>> Cluster({'nodes': 123})
+    Traceback (most recent call last):
+      ...
+    TypeError: cluster configuration node specification must be a sequence
+    >>> Cluster({'nodes': []})
+    Traceback (most recent call last):
+      ...
+    ValueError: cluster configuration must contain at least one node
+
+    This function does not check the supplied arguments against requirements
+    for particular key types. Those checks are performed within the methods
+    of specific key classes.
     """
-    def __init__(self: Cluster, cluster: dict):
+    def __init__(self: Cluster, configuration: dict):
         """
-        Ensure the provided cluster configuration is valid and create an
-        instance of the wrapper class.
-
-        :param cluster: Cluster configuration.
-
-        A configuration must satisfy independent requirements that govern its type
-        and what keys/values it must have.
-
-        >>> Cluster([{}, {}, {}])
-        Traceback (most recent call last):
-          ...
-        TypeError: cluster configuration must be a dictionary
-        >>> Cluster({})
-        Traceback (most recent call last):
-          ...
-        ValueError: cluster configuration must specify nodes
-        >>> Cluster({'nodes': 123})
-        Traceback (most recent call last):
-          ...
-        TypeError: cluster configuration node specification must be a sequence
-        >>> Cluster({'nodes': []})
-        Traceback (most recent call last):
-          ...
-        ValueError: cluster configuration must contain at least one node
-
-        This function does not check the supplied arguments against requirements
-        for particular key types. Those checks are performed within the methods
-        of specific key classes.
+        This constructor is documented in the class definition docstring.
         """
-        if not isinstance(cluster, dict):
+        if not isinstance(configuration, dict):
             raise TypeError('cluster configuration must be a dictionary')
 
-        if 'nodes' not in cluster:
+        if 'nodes' not in configuration:
             raise ValueError('cluster configuration must specify nodes')
 
-        if not isinstance(cluster['nodes'], Sequence):
+        if not isinstance(configuration['nodes'], Sequence):
             raise TypeError(
                 'cluster configuration node specification must be a sequence'
             )
 
-        if len(cluster['nodes']) < 1:
+        if len(configuration['nodes']) < 1:
             raise ValueError('cluster configuration must contain at least one node')
-        
-        self.update(cluster)
+
+        self.update(configuration)
 
 class Operations(dict):
     """
-    Specification identifying what operations on ciphertexts a key supports.
+    Data structure for representing a specification identifying what operations
+    on ciphertexts a key supports.
+
+    :param specification: Operations specification.
+
+    A specification must satisfy independent requirements that govern its type
+    and what keys and values it must have. The constructor ensures that the
+    provided operations specification is valid and creates an instance of the
+    class. 
+
+    >>> Operations([])
+    Traceback (most recent call last):
+      ...
+    TypeError: operations specification must be a dictionary
+    >>> Operations({'foo': True})
+    Traceback (most recent call last):
+      ...
+    ValueError: permitted operations are limited to store, match, and sum
+    >>> Operations({'store': 123})
+    Traceback (most recent call last):
+      ...
+    TypeError: operations specification values must be boolean
+    >>> Operations({'store': True, 'sum': True})
+    Traceback (most recent call last):
+      ...
+    ValueError: operations specification must designate exactly one operation
+
+    This function does not check the supplied arguments against requirements
+    for particular key types. Those checks are performed within the methods
+    of specific key classes.
     """
     def __init__(self: Operations, specification: dict):
         """
-        Ensure the provided operations specification is valid and create an
-        instance of the wrapper class.
-
-        :param specification: Operations specification.
-
-        A specification must satisfy independent requirements that govern its type
-        and what keys/values it must have.
-
-        >>> Operations([])
-        Traceback (most recent call last):
-          ...
-        TypeError: operations specification must be a dictionary
-        >>> Operations({'foo': True})
-        Traceback (most recent call last):
-          ...
-        ValueError: permitted operations are limited to store, match, and sum
-        >>> Operations({'store': 123})
-        Traceback (most recent call last):
-          ...
-        TypeError: operations specification values must be boolean
-        >>> Operations({'store': True, 'sum': True})
-        Traceback (most recent call last):
-          ...
-        ValueError: operations specification must designate exactly one operation
-
-        This function does not check the supplied arguments against requirements
-        for particular key types. Those checks are performed within the methods
-        of specific key classes.
+        This constructor is documented in the class definition docstring.
         """
         # Check the operations specification.
         if not isinstance(specification, dict):
@@ -817,7 +821,7 @@ class ClusterKey(_Key):
             )
 
         _validate_key_attributes(cluster, operations, threshold)
-        
+
         cluster_key = _Key({'cluster': cluster, 'operations': operations})
         cluster_key.__class__ = ClusterKey # Constructor disabled to mirror TypeScript.
         if threshold is not None:
@@ -934,9 +938,9 @@ class PublicKey(_Key):
           ...
         TypeError: secret key expected
         """
-        # No internal validation of the supplied secret key is performed 
-        # beyond what is necessary for the generation of this public key. 
-        # It is also assumed that the encapsulated key from the Paillier 
+        # No internal validation of the supplied secret key is performed
+        # beyond what is necessary for the generation of this public key.
+        # It is also assumed that the encapsulated key from the Paillier
         # cryptosystem library has valid internal structure.
 
         if not isinstance(secret_key, SecretKey):
@@ -960,7 +964,6 @@ class PublicKey(_Key):
         instance. This method complements the :obj:`load` method.
         """
         return {
-            'material': {},
             'cluster': self['cluster'],
             'operations': self['operations'],
 
@@ -1262,7 +1265,10 @@ def encrypt(
             # divided by four to determine the length of its hex representation.
             # The ciphertext is then padded to always have the same length (in case
             # the underlying integer happens to have a shorter representation).
-            return ciphertext.zfill((SecretKey._paillier_prime_bit_length * 4) // 4)
+            return ciphertext.zfill(
+                # pylint: disable=protected-access
+                (SecretKey._paillier_prime_bit_length * 4) // 4
+            )
 
         # For multiple-node clusters and no threshold, additive secret sharing is used.
         if 'threshold' not in key:

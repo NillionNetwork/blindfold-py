@@ -69,9 +69,10 @@ autodoc_default_options = {
     'exclude-members': ','.join([
         '__module__',
         '__dict__',
+        '__annotations__',
+        '__init__',
         '__hash__',
-        '__weakref__',
-        '__annotations__'
+        '__weakref__'
     ])
 }
 autodoc_preserve_defaults = True
