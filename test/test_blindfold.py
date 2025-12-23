@@ -30,7 +30,7 @@ _PLAINTEXT_SIGNED_INTEGER_MAX: int = (2 ** 31) - 1
 _PLAINTEXT_STRING_BUFFER_LEN_MAX: int = 4096
 """Maximum length of plaintext string value that can be encrypted."""
 
-_SEED_VALUES = [
+seed_values: Union[str, bytes] = [
     "012345678901234567890123456789012345678901234567890123456789",
     "012345678901234567890123456789012345678901234567890123456789".encode()
 ]
@@ -38,15 +38,15 @@ _SEED_VALUES = [
 Seeds used for tests confirming that key generation from seeds is consistent.
 """
 
-_PLAINTEXT_INTEGER_VALUES: Sequence[int] = [
+plaintext_integer_values: Sequence[int] = [
     _PLAINTEXT_SIGNED_INTEGER_MIN, -123, 0, 123, _PLAINTEXT_SIGNED_INTEGER_MAX
 ]
 """
 Sequence of plaintext integer values used across multiple tests.
 """
 
-_PLAINTEXT_STRING_VALUES: Sequence[str] = [
-    "x" * length
+plaintext_string_values: Sequence[str] = [
+    'x' * length
     for length in [
         0, 1, 3, 5, 10, 50, 256, 385, 500, 1000, 2000,
         _PLAINTEXT_STRING_BUFFER_LEN_MAX
@@ -56,11 +56,37 @@ _PLAINTEXT_STRING_VALUES: Sequence[str] = [
 Sequence of plaintext string values used across multiple tests.
 """
 
-_PLAINTEXT_BYTES_VALUES: Sequence[bytes] = [
+plaintext_bytes_values: Sequence[bytes] = [
     bytes(0), bytearray([123]), bytes([123] * _PLAINTEXT_STRING_BUFFER_LEN_MAX)
 ]
 """
 Sequence of plaintext binary values used across multiple tests.
+"""
+
+scenarios: tuple[int, Union[None, int], Sequence[set[int]]] = [
+    (1, None, [{0}]),
+    (2, None, [{0, 1}]),
+    (3, None, [{0, 1, 2}]),
+
+    # Scenarios with thresholds but no missing shares.
+    (2, 1, [{0, 1}]),
+    (2, 2, [{0, 1}]),
+    (3, 1, [{0, 1, 2}]),
+    (3, 2, [{0, 1, 2}]),
+    (3, 3, [{0, 1, 2}]),
+
+    # Scenarios with thresholds and missing shares.
+    (2, 1, [{0}, {1}]),
+    (3, 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
+    (3, 2, [{0, 1}, {0, 2}, {1, 2}]),
+    (4, 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
+    (4, 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
+    (5, 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
+    (5, 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
+    (5, 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
+]
+"""
+Common collection of scenarios for the store and sum operations.
 """
 
 # Modify the Paillier secret key length to reduce running time of tests.
@@ -109,7 +135,7 @@ class TestAPI(TestCase):
 def common_key_methods_dump_load(
         test_case: TestCase,
         Key: type, # pylint: disable=invalid-name
-        key: Union[blindfold.SecretKey, blindfold.ClusterKey]
+        key: Union[blindfold.SecretKey, blindfold.PublicKey, blindfold.ClusterKey]
     ):
     """
     Common pattern for testing dump/load methods of cryptographic key classes.
@@ -173,7 +199,7 @@ class TestKeys(TestCase):
         Test key generation from seed for the store operation both with a single
         node and multiple (without/with threshold) nodes.
         """
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             for n in [1, 2, 3]:
                 for t in thresholds(n):
                     sk_from_seed = blindfold.SecretKey.generate(
@@ -197,7 +223,7 @@ class TestKeys(TestCase):
         """
         Test key generation from seed for the match operation with a single node.
         """
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             for n in [1, 2, 3]:
                 sk_from_seed = blindfold.SecretKey.generate(
                     cluster(n),
@@ -220,7 +246,7 @@ class TestKeys(TestCase):
         Test key generation from seed for the sum operation with multiple
         (without/with a threshold) nodes.
         """
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             for (n, hash_from_material) in [
               (2, 'GmmTqmaeT0Uhe1h94yJHEQXG45beO6t+z/m9EBZCNAY='),
               (3, 'L8RiHNq2EUgt/fDOoUw9QK2NISeUkAkhxHHIPoHPZ84='),
@@ -694,35 +720,14 @@ class TestFunctions(TestCase):
         Test encryption and decryption for the store operation with single/multiple
         nodes and without/with threshold (including subcluster combinations).
         """
-        for (n, t, combinations) in [
-            (1, None, [{0}]),
-            (2, None, [{0, 1}]),
-            (3, None, [{0, 1, 2}]),
-
-            # Scenarios with thresholds but no missing shares.
-            (2, 1, [{0, 1}]),
-            (2, 2, [{0, 1}]),
-            (3, 1, [{0, 1, 2}]),
-            (3, 2, [{0, 1, 2}]),
-            (3, 3, [{0, 1, 2}]),
-
-            # Scenarios with thresholds and missing shares.
-            (2, 1, [{0}, {1}]),
-            (3, 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
-            (3, 2, [{1, 2}, {0, 1}, {0, 2}]),
-            (4, 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
-            (4, 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
-            (5, 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
-            (5, 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
-            (5, 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
-        ]:
+        for (n, t, combinations) in scenarios:
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
                 if not (n == 1 and Key == blindfold.ClusterKey):
                     key = Key.generate(cluster(n), {'store': True}, t)
                     for plaintext in (
-                        _PLAINTEXT_INTEGER_VALUES +
-                        _PLAINTEXT_INTEGER_VALUES +
-                        _PLAINTEXT_BYTES_VALUES
+                        plaintext_integer_values +
+                        plaintext_string_values +
+                        plaintext_bytes_values
                     ):
                         ciphertext = blindfold.encrypt(key, plaintext)
                         for combination in combinations:
@@ -772,7 +777,7 @@ class TestFunctions(TestCase):
         """
         sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
         pk = blindfold.PublicKey.generate(sk)
-        for plaintext in _PLAINTEXT_INTEGER_VALUES:
+        for plaintext in plaintext_integer_values:
             ciphertext = blindfold.encrypt(pk, plaintext)
             decrypted = blindfold.decrypt(sk, ciphertext)
             self.assertEqual(decrypted, plaintext)
@@ -782,32 +787,11 @@ class TestFunctions(TestCase):
         Test encryption and decryption for the sum operation with single/multiple
         nodes and without/with threshold (including subcluster combinations).
         """
-        for (n, t, combinations) in [
-            (1, None, [{0}]),
-            (2, None, [{0, 1}]),
-            (3, None, [{0, 1, 2}]),
-
-            # Scenarios with thresholds but no missing shares.
-            (2, 1, [{0, 1}]),
-            (2, 2, [{0, 1}]),
-            (3, 1, [{0, 1, 2}]),
-            (3, 2, [{0, 1, 2}]),
-            (3, 3, [{0, 1, 2}]),
-
-            # Scenarios with thresholds and missing shares.
-            (2, 1, [{0}, {1}]),
-            (3, 1, [{0}, {1}, {2}, {1, 2}, {0, 1}, {0, 2}]),
-            (3, 2, [{1, 2}, {0, 1}, {0, 2}]),
-            (4, 2, [{0, 1}, {1, 2}, {2, 3}, {0, 2}, {1, 3}, {0, 3}, {0, 1, 2}]),
-            (4, 3, [{0, 1, 2}, {1, 2, 3}, {0, 1, 3}, {0, 2, 3}]),
-            (5, 2, [{0, 4}, {1, 3}, {0, 2}, {2, 3}]),
-            (5, 3, [{0, 1, 4}, {1, 3, 4}, {0, 2, 4}, {1, 2, 3}, {1, 2, 3, 4}]),
-            (5, 4, [{0, 1, 4, 2}, {0, 1, 3, 4}])
-        ]:
+        for (n, t, combinations) in scenarios:
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
                 if not (n == 1 and Key == blindfold.ClusterKey):
                     key = Key.generate(cluster(n), {'sum': True}, t)
-                    for plaintext in _PLAINTEXT_INTEGER_VALUES:
+                    for plaintext in plaintext_integer_values:
                         ciphertext = blindfold.encrypt(key, plaintext)
                         for combination in combinations:
                             decrypted = blindfold.decrypt(
@@ -835,7 +819,7 @@ class TestRepresentations(TestCase):
             'operations': {'store': True},
             'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             self.assertEqual(
                 sk,
                 blindfold.SecretKey.generate(cluster(1), {'store': True}, seed=seed)
@@ -863,7 +847,7 @@ class TestRepresentations(TestCase):
             'operations': {'store': True},
             'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             self.assertEqual(
                 sk,
                 blindfold.SecretKey.generate(cluster(3), {'store': True}, seed=seed)
@@ -900,7 +884,7 @@ class TestRepresentations(TestCase):
             'threshold': 2,
             'material': 'SnC3NBHUXwCbvpayZy9mNZqM3OZa7DlbF9ocHM4nT8Q='
         })
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             self.assertEqual(
                 sk,
                 blindfold.SecretKey.generate(
@@ -976,7 +960,7 @@ class TestRepresentations(TestCase):
             'operations': {'sum': True},
             'material': [2677312581, 321207441, 2186773557]
         })
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             self.assertEqual(
                 sk,
                 blindfold.SecretKey.generate(cluster(3), {'sum': True}, seed=seed)
@@ -1009,7 +993,7 @@ class TestRepresentations(TestCase):
             'threshold': 2,
             'material': [2677312581, 321207441, 2186773557]
         })
-        for seed in _SEED_VALUES:
+        for seed in seed_values:
             self.assertEqual(
                 sk,
                 blindfold.SecretKey.generate(
@@ -1031,61 +1015,47 @@ class TestCiphertextSizes(TestCase):
         Confirm that ciphertexts compatible with the storage operation have
         the expected sizes.
         """
-        sk = blindfold.SecretKey.generate(cluster(1), {'store': True})
-        for k in list(range(500)) + [_PLAINTEXT_STRING_BUFFER_LEN_MAX]:
-            self.assertLessEqual(
-                len(blindfold.encrypt(sk, 'x' * k)),
-                math.ceil((1 + k + 40) * (4 / 3)) + 2
-            )
-
-        sk = blindfold.SecretKey.generate(cluster(3), {'store': True})
-        for k in list(range(500)) + [_PLAINTEXT_STRING_BUFFER_LEN_MAX]:
-            share = blindfold.encrypt(sk, 'x' * k)[0]
-            self.assertLessEqual(
-                len(share),
-                math.ceil((1 + k + 40) * (4 / 3)) + 2
-            )
-
-        sk = blindfold.SecretKey.generate(cluster(3), {'store': True}, threshold=2)
-        for k in list(range(20)) + [_PLAINTEXT_STRING_BUFFER_LEN_MAX]:
-            share = blindfold.encrypt(sk, 'x' * k)[0]
-            self.assertLessEqual(
-                len(share),
-                math.ceil(math.ceil((1 + k + 3) * (5 / 4) + 5 + 40) * (4 / 3)) + 2
-            )
-
-        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True})
-        for k in list(range(500)) + [_PLAINTEXT_STRING_BUFFER_LEN_MAX]:
-            share = blindfold.encrypt(ck, 'x' * k)[0]
-            self.assertLessEqual(len(share), math.ceil((1 + k) * (4 / 3)) + 2)
-
-        ck = blindfold.ClusterKey.generate(cluster(3), {'store': True}, threshold=2)
-        for k in list(range(20)) + [_PLAINTEXT_STRING_BUFFER_LEN_MAX]:
-            share = blindfold.encrypt(ck, 'x' * k)[0]
-            self.assertLessEqual(
-                len(share),
-                math.ceil(math.ceil((1 + k + 3) * (5 / 4) + 5) * (4 / 3)) + 2
-            )
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                if not (Key == blindfold.ClusterKey and n == 1):
+                    for t in thresholds(n):
+                        key = Key.generate(cluster(n), {'store': True}, t)
+                        for plaintext in plaintext_string_values:
+                            ciphertext = blindfold.encrypt(key, plaintext)
+                            overhead = 40 if Key == blindfold.SecretKey else 0
+                            k = len(plaintext)
+                            self.assertLessEqual(
+                                len(ciphertext[0] if n >= 2 else ciphertext),
+                                (
+                                    math.ceil((1 + k + overhead) * (4 / 3)) + 2
+                                    if t is None else
+                                    math.ceil(
+                                        math.ceil(
+                                            (1 + k + 3) * (5 / 4) + 5 + overhead
+                                        )
+                                        *
+                                        (4 / 3)
+                                    ) + 2
+                                )
+                            )
 
     def test_ciphertext_sizes_for_match(self):
         """
         Confirm that ciphertexts compatible with the match operation have the
         expected sizes.
         """
-        sk = blindfold.SecretKey.generate(cluster(1), {'match': True})
-        for k in range(0, _PLAINTEXT_STRING_BUFFER_LEN_MAX, 100):
-            self.assertEqual(len(blindfold.encrypt(sk, 'x' * k)), 88)
-
-        sk = blindfold.SecretKey.generate(cluster(3), {'match': True})
-        for k in range(0, _PLAINTEXT_STRING_BUFFER_LEN_MAX, 100):
-            self.assertEqual(len(blindfold.encrypt(sk, 'x' * k)[0]), 88)
+        for n in [1, 2, 3]:
+            sk = blindfold.SecretKey.generate(cluster(n), {'match': True})
+            for plaintext in plaintext_string_values:
+                ciphertext = blindfold.encrypt(sk, plaintext)
+                self.assertEqual(len(ciphertext[0] if n >= 2 else ciphertext), 88)
 
     def test_ciphertext_sizes_for_sum(self):
         """
         Confirm that ciphertexts compatible with the sum operation have the
         expected sizes.
         """
-        for plaintext in _PLAINTEXT_INTEGER_VALUES:
+        for plaintext in plaintext_integer_values:
             sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
             pk = blindfold.PublicKey.generate(sk)
             # The ciphertext's bit length is four times as large as the bit length
@@ -1098,15 +1068,15 @@ class TestCiphertextSizes(TestCase):
             )
 
             for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
-                key = Key.generate(cluster(3), {'sum': True})
-                share = blindfold.encrypt(key, plaintext)[0]
-                self.assertLessEqual(math.ceil(share.bit_length() / 8), 4)
-
-            for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
-                key = Key.generate(cluster(3), {'sum': True}, threshold=2)
-                (index, value) = blindfold.encrypt(key, plaintext)[0]
-                self.assertLessEqual(math.ceil(index.bit_length() / 8), 4)
-                self.assertLessEqual(math.ceil(value.bit_length() / 8), 4)
+                for n in [2, 3]:
+                    for t in thresholds(n):
+                        key = Key.generate(cluster(n), {'sum': True}, t)
+                        share = blindfold.encrypt(key, plaintext)[0]
+                        if t is None:
+                            self.assertLess(share,_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                        else:
+                            self.assertLess(share[0],_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
+                            self.assertLess(share[1],_SECRET_SHARED_SIGNED_INTEGER_MODULUS)
 
 class TestFunctionsErrors(TestCase):
     """
@@ -1122,63 +1092,72 @@ class TestFunctionsErrors(TestCase):
         ):
             blindfold.encrypt('abc', 123)
 
-        with pytest.raises(
-            TypeError,
-            match='plaintext must be string, integer, or bytes-like object'
-        ):
-            sk = blindfold.SecretKey.generate(cluster(1), {'sum': True})
-            blindfold.encrypt(sk, {})
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                for t in thresholds(n):
+                    if not (Key == blindfold.ClusterKey and n == 1):
+                        with pytest.raises(
+                            TypeError,
+                            match='plaintext must be string, integer, or bytes-like object'
+                        ):
+                            key = Key.generate(cluster(n), {'sum': True}, t)
+                            blindfold.encrypt(key, {})
 
-        with pytest.raises(
-            ValueError,
-            match='cannot encrypt the supplied plaintext using the supplied key'
-        ):
-            sk = blindfold.SecretKey.generate(cluster(2), {'sum': True})
-            del sk['operations']['sum']
-            blindfold.encrypt(sk, 123)
+                        with pytest.raises(
+                            ValueError,
+                            match='cannot encrypt the supplied plaintext using the supplied key'
+                        ):
+                            key = Key.generate(cluster(n), {'sum': True}, t)
+                            del key['operations']['sum']
+                            blindfold.encrypt(key, 123)
 
-        for (Key, n, operations) in [
-            (blindfold.SecretKey, 1, {'store': True}),
-            (blindfold.SecretKey, 1, {'match': True}),
-            (blindfold.SecretKey, 3, {'store': True}),
-            (blindfold.SecretKey, 3, {'match': True}),
-            (blindfold.ClusterKey, 3, {'store': True})
-        ]:
-            with pytest.raises(
-                ValueError,
-                match='numeric plaintext must be a valid 32-bit signed integer'
-            ):
-                key = Key.generate(cluster(n), operations)
-                plaintext = _PLAINTEXT_SIGNED_INTEGER_MAX + 1
-                blindfold.encrypt(key, plaintext)
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                for t in thresholds(n):
+                    for ops in [{'store': True}, {'match': True}]:
+                        if not (
+                            (Key == blindfold.ClusterKey and (n == 1 or ops.get('match')))
+                            or
+                            (t is not None and ops.get('match'))
+                        ):
+                            with pytest.raises(
+                                ValueError,
+                                match='numeric plaintext must be a valid 32-bit signed integer'
+                            ):
+                                key = Key.generate(cluster(n), ops, t)
+                                plaintext = _PLAINTEXT_SIGNED_INTEGER_MAX + 1
+                                blindfold.encrypt(key, plaintext)
 
-            with pytest.raises(
-                ValueError,
-                match=(
-                    'string or binary plaintext must be at most ' +
-                    str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
-                    ' bytes or fewer in length'
-                )
-            ):
-                key = Key.generate(cluster(n), operations)
-                plaintext = 'X' * (_PLAINTEXT_STRING_BUFFER_LEN_MAX + 1)
-                blindfold.encrypt(key, plaintext)
+                            with pytest.raises(
+                                ValueError,
+                                match=(
+                                    'string or binary plaintext must be at most ' +
+                                    str(_PLAINTEXT_STRING_BUFFER_LEN_MAX) +
+                                    ' bytes or fewer in length'
+                                )
+                            ):
+                                key = Key.generate(cluster(n), ops)
+                                plaintext = 'x' * (_PLAINTEXT_STRING_BUFFER_LEN_MAX + 1)
+                                blindfold.encrypt(key, plaintext)
 
-        for cluster_ in [cluster(1), cluster(3)]:
-            sk = blindfold.SecretKey.generate(cluster_, {'sum': True})
-            ek = blindfold.PublicKey.generate(sk) if len(cluster_['nodes']) == 1 else sk
+        for Key in [blindfold.SecretKey, blindfold.ClusterKey]:
+            for n in [1, 2, 3]:
+                for t in thresholds(n):
+                    if not (Key == blindfold.ClusterKey and n == 1):
+                        key = Key.generate(cluster(n), {'sum': True}, t)
+                        ek = blindfold.PublicKey.generate(key) if n == 1 else key
 
-            with pytest.raises(
-                TypeError,
-                match='summation-compatible encryption requires a numeric plaintext'
-            ):
-                blindfold.encrypt(ek, 'abc')
+                        with pytest.raises(
+                            TypeError,
+                            match='summation-compatible encryption requires a numeric plaintext'
+                        ):
+                            blindfold.encrypt(ek, 'abc')
 
-            with pytest.raises(
-                ValueError,
-                match='numeric plaintext must be a valid 32-bit signed integer'
-            ):
-                blindfold.encrypt(ek, _PLAINTEXT_SIGNED_INTEGER_MAX + 1)
+                        with pytest.raises(
+                            ValueError,
+                            match='numeric plaintext must be a valid 32-bit signed integer'
+                        ):
+                            blindfold.encrypt(ek, _PLAINTEXT_SIGNED_INTEGER_MAX + 1)
 
     def test_decrypt_errors_invalid_key(self):
         """
