@@ -80,17 +80,31 @@ autodoc_class_signature = 'separated'
 autodoc_typehints = 'description'
 autodoc_typehints_description_target = 'documented'
 
-# Replace private class with its public parent type in list of base classes
-# for key classes.
+# Adjustments to how documentation is emitted.
 
 def autodoc_process_bases_handler(app, name, obj, options, bases):
+    # Replace private class with its public parent type in list of base classes
+    # for key classes.
     bases[:] = [
         ':obj:`dict`' if base.__qualname__ == '_Key' else base
         for base in bases
     ]
 
+def autodoc_skip_member_handler(app, what, name, obj, skip, options):
+    # Avoid emitting non-testing classes when generating documentation for
+    # the examples in the testing script.
+    return skip | name.endswith('_values') | (name in [
+      'scenarios',
+      'to_hash_base64',
+      'cluster',
+      'thresholds',
+      'common_key_methods_dump_load',
+      'TestAPI'
+    ])
+
 def setup(app):
     app.connect('autodoc-process-bases', autodoc_process_bases_handler)
+    app.connect('autodoc-skip-member', autodoc_skip_member_handler)
 
 # Allow references/links to definitions found in the Python documentation
 # and in the documentation for this package's dependencies.

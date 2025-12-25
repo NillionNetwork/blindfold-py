@@ -22,7 +22,8 @@ docs = [
     "toml~=0.10.2",
     "sphinx~=7.4",
     "sphinx-rtd-theme~=3.0",
-    "sphinx-autodoc-typehints~=2.3"
+    "sphinx-autodoc-typehints~=2.3",
+    "pytest~=8.4"
 ]
 test = [
     "pytest~=8.4",
